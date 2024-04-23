@@ -1,10 +1,6 @@
-## check we're "above" the SpaDES project level
-if (basename(getwd()) != "CCISS") {
-  stop("Please make sure workign directory is at the GH repository/CCISS folder level")
-} else {
-  rver <- paste0(version[["major"]], ".", strsplit(version[["minor"]], "[.]")[[1]][1])
-  pkgPath <- normalizePath(file.path("packages", rver), winslash = "/", mustWork = FALSE)
-  dir.create(pkgPath, recursive = TRUE, showWarnings = FALSE)
+rver <- paste0(version[["major"]], ".", strsplit(version[["minor"]], "[.]")[[1]][1])
+pkgPath <- normalizePath(file.path("packages", rver), winslash = "/", mustWork = FALSE)
+dir.create(pkgPath, recursive = TRUE, showWarnings = FALSE)
   .libPaths(pkgPath)
   
   # if (!requireNamespace("Require", quietly = TRUE) |
@@ -94,7 +90,6 @@ if (basename(getwd()) != "CCISS") {
   
   
   ## source scripts
-  source("SpaDES/R/02_Build_WNA_BGC_trainingset.R")
-  source("SpaDES/R/03_RunPredictHex.R")
-  source("SpaDES/R/04_CreateBGCfutsMap.R")  
-}
+source("SpaDES/R/02_Build_WNA_BGC_trainingset.R")
+source("SpaDES/R/03_RunPredictHex.R")
+source("SpaDES/R/04_CreateBGCfutsMap.R")  
