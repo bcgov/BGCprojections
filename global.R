@@ -1,17 +1,7 @@
-rver <- paste0(version[["major"]], ".", strsplit(version[["minor"]], "[.]")[[1]][1])
-pkgPath <- normalizePath(file.path("packages", rver), winslash = "/", mustWork = FALSE)
-dir.create(pkgPath, recursive = TRUE, showWarnings = FALSE)
-.libPaths(pkgPath)
 
-# if (!requireNamespace("Require", quietly = TRUE) |
-# tryCatch(packageVersion("Require", lib.loc = pkgPath) < "0.3.1.9041", error = function(e) TRUE)) {
-remotes::install_github("PredictiveEcology/Require@simplify2", update = FALSE)
-# }
+repos <- c("predictiveecology.r-universe.dev", getOption("repos"))
+install.packages("SpaDES.project", repos = repos)
 
-if (!requireNamespace("SpaDES.project", quietly = TRUE) | 
-    tryCatch(packageVersion("SpaDES.project", lib.loc = pkgPath) < "0.0.8.9031", error = function(e) TRUE)) {
-  remotes::install_github("PredictiveEcology/SpaDES.project@transition", update = FALSE)
-}
 library(SpaDES.project)
 
 out <- setupProject(
