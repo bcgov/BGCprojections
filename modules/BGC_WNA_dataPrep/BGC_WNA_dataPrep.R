@@ -33,11 +33,11 @@ defineModule(sim, list(
   reqdPkgs = list(
     ## SpaDES/caching-related:
     "reproducible",
-    "SpaDES.core (>= 2.0.3)", 
+    "SpaDES.core (>= 2.1.5)", 
     ## other:
     "aws.s3",
-    "CeresBarros/climr@8497bdbd0f2d9daa463d150b7a134394decf9e61",
-    "bcgov/ccissr@main (HEAD)",
+    "bcgov/climr@main (HEAD)",
+    "bcgov/ccissr@development (HEAD)",
     "crayon",
     "data.table",
     "foreach",
