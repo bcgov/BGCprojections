@@ -172,11 +172,10 @@ doEvent.BGC_WNA_dataPrep = function(sim, eventTime, eventType) {
       sim <- trainingDataEvent(sim)
 
       ## schedule future events
-      if (P(sim$balance)) {
         sim <- scheduleEvent(sim, time(sim), currentModule(sim), "getPredictionData")
-      }
+        
       ## schedule future events
-      if (P(sim$balance)) {
+      if (P(sim)$balance) {
         sim <- scheduleEvent(sim, time(sim), currentModule(sim), "balanceData")
       }
     },
@@ -394,7 +393,7 @@ predictionDataEvent <- function(sim) {
                                  ## .getClimVars args
                                  byCombo = TRUE, 
                                  outFormat = "disk",
-                                 filename = filename(outputPath(sim), "projectedClimate.csv"))
+                                 filename = file.path(outputPath(sim), "projectedClimate.csv"))
   
   sim$trainData
   
