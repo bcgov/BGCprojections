@@ -43,6 +43,7 @@ defineModule(sim, list(
     "foreach",
     "gdalUtilities",
     "ggplot2",
+    "sf",
     "terra",
     "themis",
     "tidymodels"),
@@ -413,22 +414,32 @@ predictionDataEvent <- function(sim) {
                   path = dPath)
   sim$bgcs <- vect(file.path(dPath, "WNA_BGC_v12_5Apr2022.gpkg"))
   .gc()
-  
+
   if (!is.null(sim$studyArea)) {
-    sim$studyArea <- project(sim$studyArea, y = crs(sim$bgcs, proj = TRUE))
+    CRS <- crs(sim$bgcs, proj = TRUE)
+    
+    ## July 2024 - NRCan network blocking HTTPS, which causes terra to fail to reproject.
+    ## see https://stackoverflow.com/questions/76973035/certgetcertificatechain-trust-error-cert-trust-is-untrusted-root-gdal-error-1
+    studyArea <- st_as_sf(sim$studyArea)
+    studyArea <- st_transform(studyArea, y = CRS)
+    
+    sim$studyArea <- vect(studyArea)
   } else {
     message(blue("studyArea not provided. No cropping will be done."))
   }
   
+  ## July 2024 - NRCan network blocking HTTPS, which causes terra to fail to reproject.
+  ## see https://stackoverflow.com/questions/76973035/certgetcertificatechain-trust-error-cert-trust-is-untrusted-root-gdal-error-1
   cacheExtra <- list(sim$studyArea, table(sim$bgcs$BGC))
-  sim$bgcs <- Cache(postProcessTerra,
-                    from = sim$bgcs,
-                    cropTo = if (is.null(sim$studyArea)) NA else sim$studyArea,
-                    projectTo = NA,
-                    maskTo = NA,
-                    .cacheExtra = cacheExtra,
-                    userTags = c(cacheTags, "bgcs"), 
-                    omitArgs = c("from", "userTags", "cropTo", "projectTo", "maskTo"))
+  bgcs <- Cache(postProcessTo,
+                from = st_as_sf(sim$bgcs),
+                cropTo = if (is.null(sim$studyArea)) NA else st_as_sf(sim$studyArea),
+                projectTo = NA,
+                maskTo = NA,
+                .cacheExtra = cacheExtra,
+                userTags = c(cacheTags, "bgcs"),
+                omitArgs = c("from", "userTags", "cropTo", "projectTo", "maskTo"))
+  sim$bgcs <- vect(bgcs)
   .gc()
   
   ## DEM
