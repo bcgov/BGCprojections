@@ -75,17 +75,17 @@ defineModule(sim, list(
                           "`sim$predData`.")),
     defineParameter("GCMperiods", "character", climr::list_gcm_periods(), NA, NA,
                     paste("List of future periods to obtain climate projections for `sim$predData`.")),
-    defineParameter("GCMruns", "integer", 3L, 1L, Inf,
+    defineParameter("GCMruns", "numeric", 3, 1, Inf,
                     paste("Number of General Circulation Models (GCMs) runs to obtain climate projections for",
                           "`sim$predData`. Note that the ensemble mean across runs will not be used.")),
-    defineParameter("gridSize", "integer", 2000L, 1, Inf,
+    defineParameter("gridSize", "numeric", 200L, 1, Inf,
                     paste("Distance in m between points of the regular grid used to extract",
                           "BGC, elevation (used for cliamte downscaling) and climate data to",
                           "fit the BGC zones predictive model.")),
     defineParameter("SSPs", "character", climr::list_ssps(), NA, NA,
                     paste("List of Shared Socioeconomic Pathway scenarios (SSPs) to obtain climate projections for",
                           "`sim$predData`.")),
-    defineParameter("nthread", "integer", 1L, 1L, Inf,
+    defineParameter("nthread", "numeric", 1, 1, Inf,
                     paste("Passed to `climr::downscale(..., nthread)` to parallelise climate downscaling operations")),
     ## default global params.
     defineParameter(".plots", "character", "screen", NA, NA,
@@ -97,8 +97,10 @@ defineModule(sim, list(
     ## .seed is optional: `list('init' = 123)` will `set.seed(123)` for the `init` event only.
     defineParameter(".seed", "list", list(), NA, NA,
                     "Named list of seeds to use for each event (names)."),
-    defineParameter(".useCache", "logical", FALSE, NA, NA,
-                    "Should caching of events or module be used?")
+    defineParameter(".useCache", "logical", c(".inputObjects"), NA, NA,
+                    "Should caching of events or module be used? We advise not caching",
+                    "events other than '.inputObjects' as this module produces a large 'simList'",
+                    "that can take long to digest. Internal caching still occurs in each event.")
   ),
   inputObjects = bindrows(
     expectsInput(objectName = "bgcs", objectClass = "SpatVector", 
@@ -145,6 +147,7 @@ defineModule(sim, list(
                                "a column of 'current' BGCs (response), columns of longitude ('lon') and latitude ('lat'),", 
                                "columns of climate covariates defined by `P(sim)$climPredictors`",
                                "and a 'CRS' attribute pertaining to the projection used in 'lon', 'lat' columns.",
+                               "Climate covariate values correspond to the 1961-1990 reference period.",
                                "Rows correspond to point locations sampled",
                                "from a regular grid of `P(sim)$gridSize` spacing.",
                                "If `P(sim)$balance` is `TRUE`, `sim$trainData` is subsampled",
