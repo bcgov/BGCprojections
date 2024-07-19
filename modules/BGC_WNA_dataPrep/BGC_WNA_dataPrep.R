@@ -259,11 +259,13 @@ trainingDataEvent <- function(sim) {
   ## get climate data
   climData <- Cache(
     getClimate,
-    coords = trainCoords, 
+    coords = trainCoords[1:10], 
     which_refmap = "auto", 
     return_refperiod = TRUE, 
     vars = P(sim)$climrVars, 
+    byCombo = TRUE,
     cache = TRUE,
+    useCache = FALSE,
     .cacheExtra = list(summary(trainCoords)),
     userTags = c(cacheTags, "climData"),
     omitArgs = c("userTags", "trainCoords", "bgcs"))
@@ -391,20 +393,34 @@ predictionDataEvent <- function(sim) {
   browser()  ## out of memory if using a original test SA
   ## get climate data from climr
   ## extract by subsets of points, then write to csv with append = TRUE
-  projectedClimate <- getClimate(predCoords,
-                                 ## climr args:
-                                 which_normal = "normal_composite",
-                                 gcm_models = P(sim)$GCMs,
-                                 ssp = P(sim)$SSPs, 
-                                 gcm_period = P(sim)$GCMperiods, 
-                                 max_run = P(sim)$GCMruns,
-                                 nthread = P(sim)$nthread,
-                                 ## .getClimVars args
-                                 byCombo = TRUE, 
-                                 outFormat = "disk",
-                                 filename = file.path(outputPath(sim), "projectedClimate.csv"))
+  projClimData <- Cache(
+    getClimate,
+    coords = predCoords[1:10], 
+    which_refmap = "auto", 
+    obs_periods = "2001_2020",
+    return_refperiod = FALSE, 
+    vars = P(sim)$climrVars, 
+    byCombo = TRUE,
+    cache = TRUE,
+    useCache = FALSE,
+    .cacheExtra = list(summary(trainCoords)),
+    userTags = c(cacheTags, "climData"),
+    omitArgs = c("userTags", "trainCoords", "bgcs"))
   
-  sim$trainData
+  setDT(projClimData)   ## this shouldn't be necessary, submit issue/reprex to reproducible.
+  
+  ## add more climate variables
+  addVars(projClimData)
+  
+  ## subset data to variables of interest
+  trainData <- predData[, .SD, .SDcols = c("BGC", "id", P(sim)$climPredictors)]
+  predData <- predData[complete.cases(predData)]
+  
+  ## add back original lon lat, and a CRS attribute
+  predData <- predCoords[predData, on = "id", nomatch = 0L]
+  attr(predData, "CRS") <- crs("EPSG:4326", proj = TRUE)
+  
+  sim$predData <- predData
   
   # ! ----- STOP EDITING ----- ! #
   return(invisible(sim))
