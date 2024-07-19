@@ -168,20 +168,13 @@ doEvent.BGC_WNA_dataPrep = function(sim, eventTime, eventType) {
     eventType,
     init = {
       sim <- trainingDataEvent(sim)
-
-      ## schedule future events
-        sim <- scheduleEvent(sim, time(sim), currentModule(sim), "getPredictionData")
-        
+      
+      sim <- predictionDataEvent(sim)
+      
       ## schedule future events
       if (P(sim)$balance) {
-        sim <- scheduleEvent(sim, time(sim), currentModule(sim), "balanceData")
+        sim <- balanceDataEvent(sim)
       }
-    },
-    getPredictionData = {
-      sim <- predictionDataEvent(sim)
-    },
-    balanceData = {
-      sim <- balanceDataEvent(sim)
     },
     warning(paste("Undefined event type: \'", current(sim)[1, "eventType", with = FALSE],
                   "\' in module \'", current(sim)[1, "moduleName", with = FALSE], "\'", sep = ""))
