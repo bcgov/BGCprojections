@@ -236,9 +236,9 @@ trainingDataEvent <- function(sim) {
   
   
   ## project to climr-compatible projection "EPSG:4326"
-  trainCoords <- Cache(project,
-                       x = trainCoords, 
-                       y = crs("EPSG:4326", proj = TRUE),
+  trainCoords <- Cache(projectTo,
+                       from = trainCoords, 
+                       projectTo = crs("EPSG:4326", proj = TRUE),
                        .cacheExtra = summary(trainCoords),
                        userTags = c(cacheTags, "trainCoords_proj"),
                        omitArgs = c("userTags", "x"))
