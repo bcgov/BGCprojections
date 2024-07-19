@@ -286,7 +286,7 @@ trainingDataEvent <- function(sim) {
   trainData <- climData[, .SD, .SDcols = c("BGC", "id", P(sim)$climPredictors)]
   trainData <- trainData[complete.cases(trainData)]
   
-  ## add back lon lat, and a CRS attribute
+  ## add back original lon lat, and a CRS attribute
   trainData <- trainCoords[trainData, on = "id", nomatch = 0L]
   attr(trainData, "CRS") <- crs("EPSG:4326", proj = TRUE)
   
