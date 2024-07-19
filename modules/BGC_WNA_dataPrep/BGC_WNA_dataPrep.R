@@ -1,9 +1,3 @@
-## Everything in this file and any files in the R directory are sourced during `simInit()`;
-## all functions and objects are put into the `simList`.
-## To use objects, use `sim$xxx` (they are globally available to all modules).
-## Functions can be used inside any function that was sourced in this module;
-## they are namespaced to the module, just like functions in R packages.
-## If exact location is required, functions will be: `sim$.mods$<moduleName>$FunctionName`.
 defineModule(sim, list(
   name = "BGC_WNA_dataPrep",
   description = paste("Prepares training data to fit a biogeoclimatic (BGC) zones model,",
@@ -163,8 +157,6 @@ defineModule(sim, list(
   )
 ))
 
-## event types
-#   - type `init` is required for initialization
 
 doEvent.BGC_WNA_dataPrep = function(sim, eventTime, eventType) {
   switch(
@@ -192,10 +184,6 @@ doEvent.BGC_WNA_dataPrep = function(sim, eventTime, eventType) {
   return(invisible(sim))
 }
 
-## event functions
-#   - keep event functions short and clean, modularize by calling subroutines from section below.
-
-### template initialization
 trainingDataEvent <- function(sim) {
   # ! ----- EDIT BELOW ----- ! #
   cacheTags <- c(currentModule(sim), "function:trainingDataEvent")
