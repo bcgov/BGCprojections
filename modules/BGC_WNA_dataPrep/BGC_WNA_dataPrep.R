@@ -42,6 +42,8 @@ defineModule(sim, list(
     "themis",
     "tidymodels"),
   parameters = bindrows(
+    defineParameter("assertions", "logical", TRUE, NA, NA, paste("Turn on/off assertions -- i.e. checks ",
+                                                                 "for object conformity and expected code behaviour.")),
     defineParameter("badBGCs", "character", 
                     c("BWBSvk", "ICHmc1a", "MHun", "SBSun", "ESSFun", "SWBvk", "MSdm3",
                       "ESSFdc3", "IDFdxx_WY", "MSabS", "FGff", "JPWmk_WY"), 
@@ -224,6 +226,15 @@ trainingDataEvent <- function(sim) {
                        userTags = c(cacheTags, "trainCoords_bgc"),
                        omitArgs = c("userTags", "x", "y"))
   
+  if (P(sim)$assertions) {
+    test <- geom(trainCoords)
+    
+    if (nrow(test[!complete.cases(test),])) {
+      stop("NAs found in lat/long or BGC zones. Please debug 'trainingDataEvent' function")
+    }
+  }
+  
+  
   ## project to climr-compatible projection "EPSG:4326"
   trainCoords <- Cache(project,
                        x = trainCoords, 
@@ -231,6 +242,15 @@ trainingDataEvent <- function(sim) {
                        .cacheExtra = summary(trainCoords),
                        userTags = c(cacheTags, "trainCoords_proj"),
                        omitArgs = c("userTags", "x"))
+  
+  if (P(sim)$assertions) {
+    test <- geom(trainCoords)
+    
+    if (nrow(test[!complete.cases(test),])) {
+      stop("NAs generated after reprojecting. Please debug 'trainingDataEvent' function")
+    }
+  }
+  
   ## back to DT
   trainCoords <- as.data.table(trainCoords, geom = "XY") |>
     setnames(old = c("x", "y"), new = c("lon", "lat"))
