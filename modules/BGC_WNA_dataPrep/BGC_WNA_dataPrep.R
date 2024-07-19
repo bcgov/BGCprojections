@@ -214,6 +214,17 @@ trainingDataEvent <- function(sim) {
   rm(elev)
   .gc()
   
+  ## checks
+  ## temp
+  params(sim)$BGC_WNA_dataPrep$assertions <- TRUE
+  if (P(sim)$assertions) {
+    test <- vect(trainCoords, geom = c("lon", "lat"), crs = crs(sim$bgcs)) |>
+      geom()
+    if (nrow(test[!complete.cases(test),])) {
+      stop("NAs found in lat/long values for elevation. Please debug 'trainingDataEvent' function")
+    }
+  }
+  
   ## add BGCs
   trainCoords <- Cache(terra::intersect,  ## much faster than extract.
                        x = vect(trainCoords, geom = c("lon", "lat"), crs = crs(sim$bgcs)), 
