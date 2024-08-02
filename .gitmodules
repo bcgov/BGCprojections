@@ -1,6 +1,0 @@
-[submodule "modules/BGC_WNA_model"]
-	path = modules/BGC_WNA_model
-	url = git@github.com:bcgov/BGC_WNA_model.git
-[submodule "modules/BGC_WNA_predict"]
-	path = modules/BGC_WNA_predict
-	url = git@github.com:bcgov/BGC_WNA_predict.git
