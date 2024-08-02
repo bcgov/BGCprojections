@@ -1,6 +1,6 @@
 ---
-title: "BGC_WNA_dataPrep Manual"
-subtitle: "v.`r SpaDES.core::moduleMetadata(module = 'BGC_WNA_dataPrep', path = '..')$version`"
+title: "BGCWNAmodel_trainAndProj Manual"
+subtitle: "v.`r SpaDES.core::moduleMetadata(module = 'BGCWNAmodel_trainAndProj', path = '..')$version`"
 date: "Last updated: `r Sys.Date()`"
 output:
   bookdown::html_document2:
@@ -12,15 +12,15 @@ output:
     keep_md: yes
 editor_options:
   chunk_output_type: console
-  bibliography: citations/references_BGC_WNA_dataPrep.bib
+  bibliography: citations/references_BGCWNAmodel_trainAndProj.bib
 link-citations: true
 always_allow_html: true
 ---
 
-# BGC_WNA_dataPrep Module
+# BGCWNAmodel_trainAndProj Module
 
 <!-- the following are text references used in captions for LaTeX compatibility -->
-(ref:BGCprojections-dataPrep) *BGC_WNA_dataPrep*
+(ref:BGCprojections-dataPrep) *BGCWNAmodel_trainAndProj*
 
 ```{r setup-BGCprojections-dataPrep, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, eval = FALSE, results = "hold") ## change to eval = TRUE if all chunks are to be evaluated
@@ -38,7 +38,7 @@ download.file(url = "https://img.shields.io/badge/Made%20with-Markdown-1f425f.pn
 
 #### Authors:
 
-`r paste(as.character(SpaDES.core::moduleMetadata(module = "BGC_WNA_dataPrep", path = '..')$authors), sep = ', ')`
+`r paste(as.character(SpaDES.core::moduleMetadata(module = "BGCWNAmodel_trainAndProj", path = '..')$authors), sep = ', ')`
 <!-- ideally separate authors with new lines, '\n' not working -->
 
 ## Module Overview
@@ -53,11 +53,11 @@ This is a template for module documentation, and should be changed to reflect yo
 ### Module inputs and parameters
 
 Describe input data required by the module and how to obtain it (e.g., directly from online sources or supplied by other modules)
-If `sourceURL` is specified, `downloadData("BGC_WNA_dataPrep", "C:/Users/cbarros/GitHub/BCGov/CCISS/SpaDES/modules")` may be sufficient.
+If `sourceURL` is specified, `downloadData("BGCWNAmodel_trainAndProj", "C:/Users/cbarros/GitHub/BCGov/CCISS/SpaDES/modules")` may be sufficient.
 Table \@ref(tab:moduleInputs-BGCprojections-dataPrep) shows the full list of module inputs.
 
 ```{r moduleInputs-BGCprojections-dataPrep, echo = FALSE, eval = TRUE, message = FALSE, warning = FALSE}
-df_inputs <- SpaDES.core::moduleInputs("BGC_WNA_dataPrep", "C:/Users/cbarros/GitHub/BCGov/CCISS/SpaDES/modules")
+df_inputs <- SpaDES.core::moduleInputs("BGCWNAmodel_trainAndProj", "C:/Users/cbarros/GitHub/BCGov/CCISS/SpaDES/modules")
 knitr::kable(df_inputs,
              caption = "List of (ref:BGCprojections-dataPrep) input objects and their description.") %>%
   kableExtra::kable_styling(latex_options = "scale_down", full_width = TRUE)
@@ -67,7 +67,7 @@ Provide a summary of user-visible parameters (Table \@ref(tab:moduleParams-BGCpr
 
 
 ```{r moduleParams-BGCprojections-dataPrep, echo = FALSE, eval = TRUE, message = FALSE, warning = FALSE}
-df_params <- SpaDES.core::moduleParams("BGC_WNA_dataPrep", "C:/Users/cbarros/GitHub/BCGov/CCISS/SpaDES/modules")
+df_params <- SpaDES.core::moduleParams("BGCWNAmodel_trainAndProj", "C:/Users/cbarros/GitHub/BCGov/CCISS/SpaDES/modules")
 knitr::kable(df_params, caption = "List of (ref:BGCprojections-dataPrep) parameters and their description.") %>%
   kableExtra::kable_styling(latex_options = "scale_down", full_width = TRUE)
 ```
@@ -89,7 +89,7 @@ Write what is saved.
 Description of the module outputs (Table \@ref(tab:moduleOutputs-BGCprojections-dataPrep)).
 
 ```{r moduleOutputs-BGCprojections-dataPrep, echo = FALSE, eval = TRUE, message = FALSE, warning = FALSE}
-df_outputs <- SpaDES.core::moduleOutputs("BGC_WNA_dataPrep", "C:/Users/cbarros/GitHub/BCGov/CCISS/SpaDES/modules")
+df_outputs <- SpaDES.core::moduleOutputs("BGCWNAmodel_trainAndProj", "C:/Users/cbarros/GitHub/BCGov/CCISS/SpaDES/modules")
 knitr::kable(df_outputs, caption = "List of (ref:BGCprojections-dataPrep) outputs and their description.") %>%
   kableExtra::kable_styling(latex_options = "scale_down", full_width = TRUE)
 ```

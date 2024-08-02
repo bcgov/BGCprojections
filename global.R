@@ -19,7 +19,7 @@ out <- setupProject(
   packages = c("future", 
                "PredictiveEcology/reproducible@modsForLargeArchives",
                "sf"), 
-  modules = c("BGC_WNA_dataPrep"),
+  modules = c("bcgov/BGCprojections@main/modules/BGCWNAmodel_trainAndProj"),
   Restart = FALSE,
   times = list(start = 1, end = 1), 
   studyArea =  {

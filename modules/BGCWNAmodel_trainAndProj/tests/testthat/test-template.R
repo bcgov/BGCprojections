@@ -9,7 +9,7 @@
 ## 3. Modify the test description based on the content you are testing.
 ##
 test_that("test Event1 and Event2.", {
-  module <- list("BGC_WNA_dataPrep")
+  module <- list("BGCWNAmodel_trainAndProj")
   path <- list(
     modulePath = "C:/Users/cbarros/GitHub/BCGov/CCISS/SpaDES/modules",
     outputPath = file.path(tempdir(), "outputs")
@@ -17,7 +17,7 @@ test_that("test Event1 and Event2.", {
   parameters <- list(
     #.progress = list(type = graphical, interval = 1),
     .globals = list(verbose = FALSE),
-    BGC_WNA_dataPrep = list(.saveInitialTime = NA)
+    BGCWNAmodel_trainAndProj = list(.saveInitialTime = NA)
   )
   times <- list(start = 0, end = 1)
 

@@ -9,8 +9,8 @@ on:
       - development
     paths:
       - .github/workflows/render-module-rmd.yaml
-      - BGC_WNA_dataPrep.Rmd
-      - BGC_WNA_dataPrep.R
+      - BGCWNAmodel_trainAndProj.Rmd
+      - BGCWNAmodel_trainAndProj.R
 
 name: Render module Rmd
 
@@ -62,18 +62,18 @@ jobs:
 
       - name: Install module package dependencies
         run: |
-          pkgs <- SpaDES.core::packages(modules = "BGC_WNA_dataPrep", paths = "..")
+          pkgs <- SpaDES.core::packages(modules = "BGCWNAmodel_trainAndProj", paths = "..")
           Require::Require(pkgs)
         shell: Rscript {0}
 
       - name: Render module Rmd
         run: |
-          rmarkdown::render("BGC_WNA_dataPrep.Rmd", encoding = "UTF-8")
+          rmarkdown::render("BGCWNAmodel_trainAndProj.Rmd", encoding = "UTF-8")
         shell: Rscript {0}
 
       - name: Commit results
         run: |
           git config user.email "actions@github.com"
           git config user.name "GitHub Actions"
-          git commit BGC_WNA_dataPrep.html -m 'Re-build BGC_WNA_dataPrep.Rmd' || echo "No changes to commit"
+          git commit BGCWNAmodel_trainAndProj.html -m 'Re-build BGCWNAmodel_trainAndProj.Rmd' || echo "No changes to commit"
           git push https://${{github.actor}}:${{secrets.GITHUB_TOKEN}}@github.com/${{github.repository}}.git HEAD:${{github.ref}} || echo "No changes to commit"
