@@ -130,7 +130,7 @@ trainData <- dataBalance_recipe |>
 trainData[, BGC := as.factor(BGC)]
 
 ## FIT MODEL WITH FULL DATA SET OR CROSS-VALIDATION
-cols <- c("BGC", climPredictors)
+# cols <- c("BGC", climPredictors) ## no longer used?
 
 ## convert to sf for spatial cv below
 trainData_SF <- trainCoords[, .(id, lon, lat)][trainData, on = "id"]
