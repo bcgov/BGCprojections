@@ -26,9 +26,10 @@ library(spbal)
 #create sf object
 bgcs_sf <- sf::st_as_sf(bgcs) #this needs to be the dissolved version 
 
+#create named number vector for each bgc 
 n_samples<-as.vector(t(bgcsdf))
 numpts<-c(rep(5, 378))
-custom_numpts <- c(10, 20, 30, 40) #need to update based on size/climate of BGCs
+#custom_numpts <- c(10, 20, 30, 40....) #update based on size/climate of each BGC- TO DO
 n_samples <- setNames(numpts, n_samples)
 
 #run BAS
