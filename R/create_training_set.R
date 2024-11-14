@@ -10,12 +10,10 @@ library(data.table)
 #studyArea <- vect(ext(c(-125, -112, 43, 55)), crs = "EPSG:4326")
 
 #pull in bgc polygons from OS 
-bgcs <- vect("//objectstore2.nrs.bcgov/ffec/CCISS_Working/WNA_BGC/WNA_BGC_v12_5Apr2022/WNA_BGC_v12_5Apr2022.gpkg")  ## for poly validation if need be
-#saveRDS(bgcs, file="spatialdata/bgc_poly.RData")
+#bgcs <- vect("//objectstore2.nrs.bcgov/ffec/CCISS_Working/WNA_BGC/WNA_BGC_v12_5Apr2022/WNA_BGC_v12_5Apr2022.gpkg")  ## for poly validation if need be
 
-#read in bgc polygons -only on CGC local 
-#bgcs<-readRDS(file="spatialdata/bgc_poly.RData")
-#bgcs<-vect(bgcs)
+#CGC locally
+bgcs<-vect("spatialdata/WNA_BGC_v13_13Nov2024_2.gpkg")
 gc()
 studyArea <- project(studyArea, y = crs(bgcs, proj = TRUE))
 
@@ -27,8 +25,9 @@ library(spbal)
 bgcs_sf <- sf::st_as_sf(bgcs) #this needs to be the dissolved version 
 
 #create named number vector for each bgc 
-n_samples<-as.vector(t(bgcsdf))
-numpts<-c(rep(5, 378))
+n_samples<-select(bgcsdf, BGC)
+n_samples<-as.vector(t(n_samples))
+numpts<-c(rep(5, 395)) #start with 5 each 
 #custom_numpts <- c(10, 20, 30, 40....) #update based on size/climate of each BGC- TO DO
 n_samples <- setNames(numpts, n_samples)
 
