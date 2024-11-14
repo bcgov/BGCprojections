@@ -12,13 +12,53 @@
 ## CREATE TRAINING SET----
 #libraries
 library(terra)
-library(reproducible)
 library(dplyr)
 library(data.table)
 library(climr)
 library(sf)
 library(raster)
 
+#pull in training set from Qgis-----
+#200 pts per BGC- Will M. 11/14/24
+trainpts<- read.csv("spatialdata/WNA_v13_200_rndpts.csv")
+  
+##assess climate variability within BGCs---- 
+#Use DEM to call in downscaled climr data
+#dem <- rast("spatialdata/WNA_DEM_4326_clipped.tif")
+
+## convert the DEM to a data.frame
+#my_grid <- as.data.frame(dem, cells = TRUE, xy = TRUE)
+my_grid<-trainpts
+my_grid<-dplyr::select(my_grid, -BGC)
+colnames(my_grid) <- c("id", "lon", "lat", "elev") # rename column names to what climr expects
+
+#which variables do we want? 
+varsl = c("Tmax","Tmin", "PPT")
+
+## climr call- This will return the observed 1961-1990 climates for the raster grid points.
+cache_clear()
+gc()
+climlayer <- downscale(
+  xyz = my_grid,  which_refmap = "refmap_climr",
+  #obs_periods = "2001_2020", 
+  vars = varsl)
+
+save(climlayer, trainingpts_w_clim.Rdata)
+
+#extract climate values from dem based climate layer 
+#trainpts0<-select(trainpts,xcoord, ycoord)
+#climdat<-extract(climlayer, trainpts0)
+#climdat<-extract(dem, trainpts0) #try first with DEM 
+
+#merge back with BGC info 
+climdat<-cbind(trainpts0, climdat)
+#rm(trainpts0)
+##trainpts<-left_join(trainpts, climdat)
+#check that elev matches and join worked 
+#plot(trainpts$Elev1, trainpts$WNA_DEM_3005_clipped)
+
+#spbal for balanced acceptance sampling----
+#NOT working 11/14/24
 ## this is for testing, otherwise make NULL
 studyArea <- vect(ext(c(-125, -112, 43, 55)), crs = "EPSG:4326")
 
@@ -29,8 +69,6 @@ studyArea <- project(studyArea, y = crs(bgcs, proj = TRUE))
 #look at data
 #bgcsdf <- as_tibble(bgcs, xy = TRUE) %>% group_by(BGC) %>% distinct(.)
 
-#spbal for balanced acceptance sampling----
-#NOT working 11/14/24
 library(spbal)
 #create sf object
 bgcs_sf <- sf::st_as_sf(bgcs) #this needs to be the dissolved version
@@ -48,40 +86,3 @@ result <- spbal::BAS(shapefile = bgcs_sf,
                      n = n_samples,
                      boundingbox = studyArea,
                      stratum = "BGC")
-
-#pull in training set from Qgis-----
-#200 pts per BGC- Will M. 11/14/24
-trainpts<- read.csv("spatialdata/WNA_v13_200_rndpts.csv")
-  
-##assess climate variability within BGCs---- 
-
-#Use DEM to call in downscaled climr data
-dem <- rast("spatialdata/WNA_DEM_4326_clipped.tif")
-
-## convert the DEM to a data.frame
-my_grid <- as.data.frame(dem, cells = TRUE, xy = TRUE)
-colnames(my_grid) <- c("id", "lon", "lat", "elev") # rename column names to what climr expects
-gc()
-
-#which variables do we want? 
-varsl = c("Tmax","Tmin", "PPT")
-
-## climr call- This will return the observed 1961-1990 climates for the raster grid points.
-cache_clear()
-climlayer <- downscale(
-  xyz = my_grid,  which_refmap = "refmap_climr",
-  #obs_periods = "2001_2020", 
-  vars = varsl)
-
-#extract climate values 
-trainpts0<-select(trainpts,xcoord, ycoord)
-climdat<-extract(climlayer, trainpts0)
-#climdat<-extract(dem, trainpts0) #try first with DEM 
-
-#merge back with BGC info 
-climdat<-cbind(trainpts0, climdat)
-rm(trainpts0)
-trainpts<-left_join(trainpts, climdat)
-#check that elev matches and join worked 
-#plot(trainpts$Elev1, trainpts$WNA_DEM_3005_clipped)
-
