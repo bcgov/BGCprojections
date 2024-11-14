@@ -3,11 +3,11 @@
 
 library(terra)
 library(reproducible)
-library(tidyverse)
+library(dplyr)
 library(data.table)
 
 ## this is for testing, otherwise make NULL
-#studyArea <- vect(ext(c(-125, -112, 43, 55)), crs = "EPSG:4326")
+studyArea <- vect(ext(c(-125, -112, 43, 55)), crs = "EPSG:4326")
 
 #pull in bgc polygons from OS 
 #bgcs <- vect("//objectstore2.nrs.bcgov/ffec/CCISS_Working/WNA_BGC/WNA_BGC_v12_5Apr2022/WNA_BGC_v12_5Apr2022.gpkg")  ## for poly validation if need be
