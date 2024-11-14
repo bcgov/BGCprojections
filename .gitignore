@@ -13,7 +13,7 @@ climr.cache/
 packages/
 
 ## data
-data/
+spatialdata/
 
 ## AWS info
 Example_S3Buckets1.R
