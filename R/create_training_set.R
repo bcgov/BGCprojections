@@ -21,16 +21,16 @@ library(tidyverse)
 
 #pull in training pts from Qgis-----
 #200 pts per BGC- Will M. 11/14/24
-trainpts<- read.csv("spatialdata/WNA_v13_200_rndpts.csv")
+trainpts<- read.csv("spatialdata/WNA_v13_200_rndpts_15Nov.csv")
   
 ##pull in climate data for training pts---- 
 my_grid<-trainpts
+my_grid$id<-rownames(my_grid)
 my_grid<-dplyr::select(my_grid, -BGC)
-colnames(my_grid) <- c("id", "lon", "lat", "elev") # rename column names to what climr expects
+colnames(my_grid) <- c( "lon", "lat", "elev", "id") # rename column names to what climr expects
 
 #which variables do we want? 
 varsl = c("Tmax","Tmin", "PPT")
-
 ## climr call- This will return the observed 1961-1990 climates for the raster grid points.
 cache_clear()
 gc()
@@ -38,6 +38,8 @@ climlayer <- downscale(
   xyz = my_grid,  which_refmap = "refmap_climr",
   #obs_periods = "2001_2020", 
   vars = varsl)
+
+save(climlayer, file="trainingpts_w_clim.Rdata")
 
 #assess climate variability within BGCs
 #merge back with BGC info 
