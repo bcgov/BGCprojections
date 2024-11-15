@@ -17,17 +17,13 @@ library(data.table)
 library(climr)
 library(sf)
 library(raster)
+library(tidyverse)
 
-#pull in training set from Qgis-----
+#pull in training pts from Qgis-----
 #200 pts per BGC- Will M. 11/14/24
 trainpts<- read.csv("spatialdata/WNA_v13_200_rndpts.csv")
   
-##assess climate variability within BGCs---- 
-#Use DEM to call in downscaled climr data
-#dem <- rast("spatialdata/WNA_DEM_4326_clipped.tif")
-
-## convert the DEM to a data.frame
-#my_grid <- as.data.frame(dem, cells = TRUE, xy = TRUE)
+##pull in climate data for training pts---- 
 my_grid<-trainpts
 my_grid<-dplyr::select(my_grid, -BGC)
 colnames(my_grid) <- c("id", "lon", "lat", "elev") # rename column names to what climr expects
@@ -43,19 +39,70 @@ climlayer <- downscale(
   #obs_periods = "2001_2020", 
   vars = varsl)
 
-save(climlayer, trainingpts_w_clim.Rdata)
-
-#extract climate values from dem based climate layer 
-#trainpts0<-select(trainpts,xcoord, ycoord)
-#climdat<-extract(climlayer, trainpts0)
-#climdat<-extract(dem, trainpts0) #try first with DEM 
-
+#assess climate variability within BGCs
 #merge back with BGC info 
-climdat<-cbind(trainpts0, climdat)
-#rm(trainpts0)
-##trainpts<-left_join(trainpts, climdat)
+load(file="trainingpts_w_clim.Rdata")
+climlayer<-left_join(climlayer, my_grid)
+climlayer<-left_join(climlayer, trainpts)
 #check that elev matches and join worked 
-#plot(trainpts$Elev1, trainpts$WNA_DEM_3005_clipped)
+plot(climlayer$Elev1, climlayer$elev) #good 
+climlayer<-dplyr::select(climlayer, -Elev1, -xcoord, -ycoord)
+
+save(climlayer, file="trainingpts_w_climALL.Rdata")
+
+rm(my_grid)
+rm(trainpts)
+gc()
+
+#look at data
+library(ggplot2)
+
+ggplot(climlayer, aes(x=BGC, y=Tmin))+ geom_boxplot()
+ggplot(climlayer, aes(x=BGC, y=Tmax))+ geom_boxplot()
+ggplot(climlayer, aes(x=BGC, y=PPT))+ geom_boxplot()
+
+
+#generate estimates by BGC
+min(climlayer$Tmin)
+CVs<-group_by(climlayer, BGC)%>%summarise(avgTmin=mean(Tmin+15), avgTmax=mean(Tmax+15), avgPpt=mean(PPT),
+                                          sdTmin=sd(Tmin+15), sdTmax=sd(Tmax+15), sdPpt=sd(PPT))%>%mutate(cvTmin=sdTmin/(avgTmin), 
+                                                                                                    cvTmax=sdTmax/(avgTmax), 
+                                                                                                     cvPpt=sdPpt/avgPpt)
+CVlong<-pivot_longer(CVs, cols = c(cvTmin, cvTmax, cvPpt), names_to = 'climvar', values_to = 'cv')%>%distinct(.)
+
+ggplot(CVlong, aes(x=BGC, y=cv))+ geom_point()+ facet_wrap(~climvar,scales = 'free')+ geom_hline(yintercept = 0.3)
+
+
+#exclusion criteria
+BGC_exclude<-subset(CVs, cvPpt>0.3)
+BGC_exclude<-BGC_exclude$BGC
+
+climlayer<-mutate(climlayer, exclude=if_else(BGC %in% BGC_exclude, 'Y', 'N'))
+
+ggplot(subset(climlayer,exclude=='Y'), aes(x=BGC, y=Tmin, fill=cvPpt, colour = cvPpt))+ geom_boxplot()+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+ggplot(subset(climlayer,exclude=='Y'), aes(x=BGC, y=Tmax))+ geom_boxplot()+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+ggplot(subset(climlayer,exclude=='Y'|BGC=="CWHxs"|BGC=="IDFww"), aes(x=BGC, y=PPT,fill=cvPpt, colour = cvPpt ))+ geom_boxplot()+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+#add in IDFww and CWHxs for comparison
+#ggplot(subset(climlayer,exclude=='Y'|BGC=="CWHxs"|BGC=="IDFww"), aes(x=BGC, y=Tmin,fill=cvTmin, colour = cvTmin ))+ geom_boxplot()+
+#  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+#ggplot(subset(climlayer,exclude=='Y'|BGC=="CWHxs"|BGC=="IDFww"), aes(x=BGC, y=Tmax,fill=cvTmax, colour = cvTmax ))+ geom_boxplot()+
+#  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+#ggplot(subset(climlayer,BGC=="IDFww"|BGC=="CWHxs"), aes(x=BGC, y=PPT,fill=cvPpt, colour = cvPpt ))+ geom_boxplot()+
+#  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+#remove actual outliers by BGC
+climlayer<-mutate(climlayer, remove= case_when(BGC=="BAFAun"& PPT>=3000~'Y',
+                                               BGC=="CCHun_CA"& PPT>=1000~'Y',
+                                               BGC=="CDFxm_CA"& PPT>=1500~'Y',
+                                               BGC=="CMAun"& PPT>=5700~'Y',
+                                               BGC=="CMXdm_OR"& PPT>=1800~'Y',
+                                               BGC=="CMXmm_OR"& PPT>=1800~'Y',
+                                               
+                                               ))
 
 #spbal for balanced acceptance sampling----
 #NOT working 11/14/24
