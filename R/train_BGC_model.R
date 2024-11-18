@@ -28,10 +28,10 @@ my_grid<-dplyr::select(my_grid, -BGC)
 colnames(my_grid) <- c("id", "lon", "lat", "elev") # rename column names to what climr expects
 
 #which variables do we want? 
-varsl = c("CMD_sm", "DD5_sp", "Eref_sm", "Eref_sp", "EXT", 
+varsl = c("CMD_sm", "DDsub0_sp", "DD5_sp", "Eref_sm", "Eref_sp", "EXT", 
           "MWMT", "NFFD_sm", "NFFD_sp", "PAS", "PAS_sp", "SHM", "Tave_sm", 
           "Tave_sp", "Tmax_sm", "Tmax_sp", "Tmin", "Tmin_at", "Tmin_sm", 
-          "Tmin_sp", "Tmin_wt", "CMI")  #  "DD_0_sp","PPT_MJ", "PPT_JAS", "CMD.total")
+          "Tmin_sp", "Tmin_wt", "CMI")  #  ""PPT_MJ", "PPT_JAS", "CMD.total")
 
 ## climr call- This will return the observed 1961-1990 climates for the raster grid points.
 cache_clear()
