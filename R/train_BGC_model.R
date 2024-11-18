@@ -28,10 +28,10 @@ my_grid<-dplyr::select(my_grid, -BGC)
 colnames(my_grid) <- c("id", "lon", "lat", "elev") # rename column names to what climr expects
 
 #which variables do we want? 
-varsl = c("CMD_sm", "DD_0_sp", "DD5_sp", "Eref_sm", "Eref_sp", "EXT", 
+varsl = c("CMD_sm", "DD5_sp", "Eref_sm", "Eref_sp", "EXT", 
           "MWMT", "NFFD_sm", "NFFD_sp", "PAS", "PAS_sp", "SHM", "Tave_sm", 
           "Tave_sp", "Tmax_sm", "Tmax_sp", "Tmin", "Tmin_at", "Tmin_sm", 
-          "Tmin_sp", "Tmin_wt", "CMI", "PPT_MJ", "PPT_JAS", "CMD.total")
+          "Tmin_sp", "Tmin_wt", "CMI")  #  "DD_0_sp","PPT_MJ", "PPT_JAS", "CMD.total")
 
 ## climr call- This will return the observed 1961-1990 climates for the raster grid points.
 cache_clear()
@@ -43,6 +43,15 @@ climlayer <- downscale(
   obs_periods = "2001_2020", 
   vars = varsl)
 
-#save(climlayer, file="trainingpts_w_clim_Final.Rdata")
+addVars <- function(dat) {
+  dat[, PPT_MJ := PPT_05 + PPT_06]
+  dat[, PPT_JAS := PPT_07 + PPT_08 + PPT_09]
+  #dat[, PPT.dormant := PPT_at + PPT_wt]
+  #dat[, CMD.def := pmax(0, 500 - PPT.dormant)]
+  #dat[, CMDMax := CMD_07]   ## TODO: THIS IS NOT NECESSARILY CMD MAX
+  dat[, CMD.total := CMD.def + CMD]
+}
+
+save(climlayer, file="trainingpts_w_clim_Final.Rdata")
 
 
