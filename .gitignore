@@ -15,6 +15,9 @@ packages/
 ## data
 spatialdata/
 
+#mods
+model_output/
+
 ## AWS info
 Example_S3Buckets1.R
 
