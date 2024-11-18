@@ -9,6 +9,16 @@
 #See the License for the specific language governing permissions and
 #limitations under the License.
 
+#libraries
+library(terra)
+library(dplyr)
+library(data.table)
+library(climr)
+library(sf)
+library(raster)
+library(tidyverse)
+
+
 #pull in training data set (lat/longs)
 trainpts<-read.csv("spatialdata/WNA_v13_50-200filtpts_15Nov.csv")
 
