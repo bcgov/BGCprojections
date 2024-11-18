@@ -40,8 +40,7 @@ gc()
 #  xyz = my_grid,  which_refmap = "refmap_climr",
 #  obs_periods = "2001_2020", 
 #  vars = varsl)
-
-#save(climlayer, file="trainingpts_w_clim.Rdata")
+#save(climlayer, file="spatialdata/trainingpts_w_clim.Rdata")
 
 #assess climate variability within BGCs----
 #merge back with BGC info 
@@ -141,7 +140,7 @@ climlayer_filt<-subset(climlayer_filt, BGC %in% BGCkeep)
 
 #clean up and save
 climlayer_filt<- dplyr::select(climlayer_filt, -id, -exclude, -area2)
-save(climlayer_filt, file="trainingpts_w_clim_FILTERED.Rdata")
+save(climlayer_filt, file="spatialdata/trainingpts_w_clim_FILTERED.Rdata")
 training_points_filt<-dplyr::select(climlayer_filt, lon, lat, elev, BGC)%>%relocate(BGC, .before = lon) 
 write.csv(training_points_filt, "spatialdata/WNA_v13_50-200filtpts_15Nov.csv" )
 
