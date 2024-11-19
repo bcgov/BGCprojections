@@ -84,8 +84,7 @@ BGC_RFprob<- ranger::ranger(BGC~ .,data = model_data, mtry= 5, classification = 
 save(BGC_RFprob, file="model_output/BGC_RFprob.Rdata")# CGC local only 
 #they are in here 
 #F:/OneDrive - Government of BC/WNA_BGC/Trained_Models/
-
-#save(BGC_RFprob, file="F/OneDrive - Government of BC/WNA_BGC/Trained_Models/model_output/BGC_RFprob.Rdata") #this doesn't work ....
+#save(BGC_RFprob, file="F:/OneDrive - Government of BC/WNA_BGC/Trained_Models/model_output/BGC_RFprob.Rdata") #this doesn't work ....
 
 
 #error estimates 
