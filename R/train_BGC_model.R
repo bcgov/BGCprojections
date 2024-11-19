@@ -99,6 +99,3 @@ accuracy <- sum(diag(cf)) / sum(cf) #acc = 0.76
 
 cf2<-BGC_RFprob$confusion.matrix
 accuracy <- sum(diag(cf2)) / sum(cf2) #acc = 0.76 
-
-
-C:\Users\ccollins\OneDrive - Government of BC\WNA_BGC\Trained_Models
