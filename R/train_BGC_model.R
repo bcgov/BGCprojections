@@ -66,7 +66,7 @@ model_data$BGC<-as.factor(model_data$BGC)
 model_data<-dplyr::select(model_data, -id, -lat, -lon, -elev, -PERIOD)
 model_data<-na.omit(model_data) #removes 47 obs with NAs in CMI
 #make sure still >50 obs for all BGCs
-BGSpts<-group_by(model_data, BGC)%>%summarise(ct=n())
+BGCpts<-group_by(model_data, BGC)%>%summarise(ct=n())
 min(BGCpts$ct)
 
 # Fit RF models- response and probability  
@@ -78,7 +78,7 @@ save(BGC_RFresp, file="model_output/BGC_RFresp.Rdata")# CGC local only
 #they are in here 
 #F:/OneDrive - Government of BC/WNA_BGC/Trained_Models/
   
-BGC_RFprob<- ranger::ranger(BGC~ .,data = model_data, mtry= 5, classification = T, probability = F, 
+BGC_RFprob<- ranger::ranger(BGC~ .,data = model_data, mtry= 5, classification = T, probability = T, 
                              num.trees = 501, splitrule =  "extratrees", min.node.size = 2,
                              importance = "permutation",write.forest = TRUE) 
 save(BGC_RFprob, file="model_output/BGC_RFprob.Rdata")# CGC local only 
@@ -98,3 +98,5 @@ accuracy <- sum(diag(cf)) / sum(cf) #acc = 0.76
 
 cf2<-BGC_RFprob$confusion.matrix
 accuracy <- sum(diag(cf2)) / sum(cf2) #acc = 0.76 
+
+#plot model predictions
