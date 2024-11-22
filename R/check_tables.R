@@ -10,15 +10,14 @@
 #limitations under the License.
 
 #libraries 
-library(tidyverse)
+#library(tidyverse)
 library(dplyr)
 #compare the list of BGCs, edatopic space table and feasibility table
 #Each BGC should have data in both the edatopic and feasibility table.
 #Each site series listed in the edatopic table should also have species information in the feasibility table (and vis versa).
 
 #read in tables 
-edatop_tab<-read.csv("tables/Edatopic_v13_1.csv")
-edatop_tab_new<-read.csv("tables/Edatopic_v13_1_VC.csv")#update to local if needed
+edatop_tab<-read.csv("tables/Edatopic_v13_1.csv")#update to local if needed
 feas_tab<-read.csv("tables/Feasibility_v13_1.csv")
 BGC_list<-read.csv("tables/WNA_BGCs_Info_v13_1.csv")
 
