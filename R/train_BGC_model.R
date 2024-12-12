@@ -74,29 +74,23 @@ BGC_RFresp<- ranger::ranger(BGC~ .,data = model_data, mtry= 5, classification = 
                             num.trees = 501, splitrule =  "extratrees", min.node.size = 2,
                             importance = "permutation",write.forest = TRUE) 
 save(BGC_RFresp, file="model_output/BGC_RFresp.Rdata")# CGC local only 
-
 #they are in here 
 #F:/OneDrive - Government of BC/WNA_BGC/Trained_Models/
   
+#probability response- this model fails- maxe
 BGC_RFprob<- ranger::ranger(BGC~ .,data = model_data, mtry= 5, classification = T, probability = T, 
                              num.trees = 501, splitrule =  "extratrees", min.node.size = 2,
                              importance = "permutation",write.forest = TRUE) 
-save(BGC_RFprob, file="model_output/BGC_RFprob.Rdata")# CGC local only 
-#they are in here 
-#F:/OneDrive - Government of BC/WNA_BGC/Trained_Models/
-#save(BGC_RFprob, file="F:/OneDrive - Government of BC/WNA_BGC/Trained_Models/model_output/BGC_RFprob.Rdata") #this doesn't work ....
+#save(BGC_RFprob, file="model_output/BGC_RFprob.Rdata")# CGC local only 
 
 
 #error estimates 
 #oob estimates 
 print(BGC_RFresp)#0.24
-print(BGC_RFprob) #0.24
+print(BGC_RFprob) #0.29
 
 #confusion matrices on fitted data 
 cf<-BGC_RFresp$confusion.matrix
 accuracy <- sum(diag(cf)) / sum(cf) #acc = 0.76 
 
-cf2<-BGC_RFprob$confusion.matrix
-accuracy <- sum(diag(cf2)) / sum(cf2) #acc = 0.76 
 
-#plot model predictions

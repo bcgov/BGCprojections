@@ -52,7 +52,7 @@ gc()
 #climlayer<-dplyr::select(climlayer, -Elev1, -xcoord, -ycoord)
 
 #save again
-#save(climlayer, file="trainingpts_w_clim.Rdata")
+#save(climlayer, file="spatialdata/trainingpts_w_clim.Rdata")
 
 rm(my_grid)
 rm(trainpts)
@@ -60,7 +60,7 @@ gc()
 
 #look at data
 library(ggplot2)
-load(file="trainingpts_w_clim.Rdata")
+load(file="spatialdata/trainingpts_w_clim.Rdata")
 
 ggplot(climlayer, aes(x=BGC, y=Tmin))+ geom_boxplot()
 ggplot(climlayer, aes(x=BGC, y=Tmax))+ geom_boxplot()
