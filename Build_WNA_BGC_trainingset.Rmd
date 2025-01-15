@@ -171,7 +171,7 @@ BGCmodel_holdoutAll <- ranger(
 saveRDS(BGCmodel_full, "//objectstore2.nrs.bcgov/ffec/CCISS_Working/BGCmodel_full.rds")
 saveRDS(BGCmodel_holdoutAll, "//objectstore2.nrs.bcgov/ffec/CCISS_Working/BGCmodel_holdoutAll.rds")
 
-## study area for testing - get points at DEM scale 
+## study area for testing - get points at DEM scale [DEB: YOU CAN USE THE WNA DEM INSTEAD OF THE PRISM DEM. ]
 crs.bc <- crs(rast("//objectstore2.nrs.bcgov/ffec/Climatologies/PRISM_BC/PRISM_dem/PRISM_dem.asc"), proj = TRUE)
 
 ## replace the followig with postProcess
@@ -188,8 +188,8 @@ studyarea_points <- as.data.frame(elevproj, cells = TRUE, xy = TRUE)
 colnames(studyarea_points) <- c("id", "x", "y", "el")
 studyarea_points <- studyarea_points[, c("x", "y", "el", "id")] #restructure for climr input
 
-predData <- climr_downscale(studyarea_points, 
-                            which_normal = "normal_composite",
+predData <- climr::downscale(studyarea_points, 
+                            which_normal = "refmap_climr",
                             return_normal = TRUE, 
                             vars = vars_needed, cache = TRUE)
 addVars(predData)
