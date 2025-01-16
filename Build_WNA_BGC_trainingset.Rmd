@@ -63,28 +63,34 @@ bgcs <- st_read("C:/Users/dobrist/Government of BC/Future Forest Ecosystems Cent
 # Use 800 m DEM instead: 
 elev <- rast("C:/Users/dobrist/Government of BC/Future Forest Ecosystems Centre - CCISS - CCISS/BGCProjections/Proxy_ObjectStorage/DEM/DEM_Composite_WNA_800m/composite_WNA_dem.tif")
  
-# Project elev to Albers.
+# Project elev to Albers (same as bgcs).
 elev <- project(elev, bgcs)
 
 # NOTE: I (Deb) made a change in the makePointCoords function (turned try() into tryCatch() in line 22 of utils.R due to an error message. It looks like the customized way of dealing with errors was no longer supported by try() but is supported by tryCatch(). 
 
 # This function makes a 2 km grid over the extent of bgcs, and fills it with a dummy variable (1L), converts to a spatial vector. It extracts elevation at the grid points using bilinear interpolation. 
-coords <- makePointCoords(bgcs, elev) |>
+coords <- makePointCoords(bgcs, elev, crs = "EPSG:3005") |>
   Cache()
 nrow(coords) # Results in 2209233 points. 
 
 # Remove those with NAs for elevation: 
 coords <- coords[!is.na(elev),]
-nrow(coords) # Retains 1655394 points. 
+nrow(coords) # Retains 1955328 points. 
 
 # Define the full training area:
-trainingarea <- ext(c(-125, -112, 43, 55))
+trainingarea <- ext(c(-1250000, -1120000, 430000, 550000))
+# trainingarea <- ext(c(-125, -112, 43, 55))
 
-# Need to rename lon and lat to work with subsetByExtent(): 
+range(coords$x)
+range(coords$y)
+
+# Need to rename lon and lat to x and y to work with subsetByExtent(): 
 setnames(coords, old = c("lon", "lat"), new = c("x", "y"))
 
 # This crops the coordinates to the training area defined above: 
-coords_train <- subsetByExtent(coords, trainingarea)
+coords_train <- subsetByExtent(coords, trainingarea, crs = "EPSG:3005")
+
+#### This does not work yet - "No points left after cropping to cropExt. Do projections match?Error: [as.data.frame] geom="XY" is only valid for point geometries. Maybe this has something to do with me renaming lon and lat to x and y? Or maybe because coords is a data table instead of a spatial object?
 
 ## make subsets of the study area for hold-outs (gaps):
 # This code makes rectangular gap extents within the bounding box of the study area. 5L is the default number of gaps to create. 
