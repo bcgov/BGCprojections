@@ -7,6 +7,9 @@ output:
   html_document: default
 ---
 
+Note: Jan 16 2025 - Deb has started using 00-build-WNA_BGC_trainingset.R script instead and has copied relevant functions over there. 
+
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, message = FALSE)
 
@@ -57,15 +60,14 @@ Points from a 4km hex grid of western north america are generated in R and submi
 ```{r}
 # bgcs <- st_read("//objectstore2.nrs.bcgov/ffec/CCISS_Working/WNA_BGC/WNA_BGC_v12_5Apr2022.gpkg")
 # Create new file paths for Deb's temporary data location: 
-bgcs <- st_read("C:/Users/dobrist/Government of BC/Future Forest Ecosystems Centre - CCISS - CCISS/BGCProjections/Proxy_ObjectStorage/CCISS_Working/WNA_BGC/WNA_BGC_v12_5Apr2022/WNA_BGC_v12_5Apr2022.gpkg")
+bgcs <- vect("C:/Users/dobrist/Government of BC/Future Forest Ecosystems Centre - CCISS - CCISS/BGCProjections/Proxy_ObjectStorage/CCISS_Working/WNA_BGC/WNA_BGC_v12_5Apr2022/WNA_BGC_v12_5Apr2022.gpkg")
 
 # elev <- rast("//objectstore2.nrs.bcgov/ffec/DEM/DEM_NorAm/NA_Elevation/data/northamerica/northamerica_elevation_cec_2023.tif")
 # Use 800 m DEM instead: 
 elev <- rast("C:/Users/dobrist/Government of BC/Future Forest Ecosystems Centre - CCISS - CCISS/BGCProjections/Proxy_ObjectStorage/DEM/DEM_Composite_WNA_800m/composite_WNA_dem.tif")
  
 # Reproject both to lat/long: 
-bgcs <- st_transform(bgcs, crs = 4326)
-elev <- project(elev, "EPSG:4326")
+bgcs <- project(bgcs, crs(4326))
 
 # NOTE: I (Deb) made a change in the makePointCoords function (turned try() into tryCatch() in line 22 of utils.R due to an error message. It looks like the customized way of dealing with errors was no longer supported by try() but is supported by tryCatch(). 
 
@@ -74,6 +76,7 @@ coords <- makePointCoords(bgcs, elev) |>
   Cache()
 nrow(coords) # Results in 2209233 points. 
 
+
 # Remove those with NAs for elevation: 
 coords <- coords[!is.na(elev),]
 nrow(coords) # Retains 1955328 points. 
@@ -81,24 +84,21 @@ nrow(coords) # Retains 1955328 points.
 # Define the full training area:
 trainingarea <- ext(c(-125, -112, 43, 55))
 
-range(coords$x)
-range(coords$y)
-
 # Need to rename lon and lat to x and y to work with subsetByExtent(): 
 setnames(coords, old = c("lon", "lat"), new = c("x", "y"))
 
 # This crops the coordinates to the training area defined above: 
 coords_train <- subsetByExtent(coords, trainingarea, crs = "EPSG:3005")
 
-#### This does not work yet - "No points left after cropping to cropExt. Do projections match?Error: [as.data.frame] geom="XY" is only valid for point geometries. Maybe this has something to do with me renaming lon and lat to x and y? Or maybe because coords is a data table instead of a spatial object?
-
 ## make subsets of the study area for hold-outs (gaps):
 # This code makes rectangular gap extents within the bounding box of the study area. 5L is the default number of gaps to create. 
 studyarea <- ext(c(-123, -117, 49, 525))
 gapextents <- makeGapExtents(studyarea, 5L)
 
-## convert to poly
+# Converts list of spatial extents into to polygons: 
 gap_poly <- lapply(gapextents, vect, crs = "EPSG:4326")
+
+# Combines all individual polygons into one 
 gap_poly <- do.call(rbind, gap_poly)
 
 coords_gaps <- subsetByExtent(coords_train, gap_poly)
