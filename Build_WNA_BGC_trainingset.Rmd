@@ -63,13 +63,14 @@ bgcs <- st_read("C:/Users/dobrist/Government of BC/Future Forest Ecosystems Cent
 # Use 800 m DEM instead: 
 elev <- rast("C:/Users/dobrist/Government of BC/Future Forest Ecosystems Centre - CCISS - CCISS/BGCProjections/Proxy_ObjectStorage/DEM/DEM_Composite_WNA_800m/composite_WNA_dem.tif")
  
-# Project elev to Albers (same as bgcs).
-elev <- project(elev, bgcs)
+# Reproject both to lat/long: 
+bgcs <- st_transform(bgcs, crs = 4326)
+elev <- project(elev, "EPSG:4326")
 
 # NOTE: I (Deb) made a change in the makePointCoords function (turned try() into tryCatch() in line 22 of utils.R due to an error message. It looks like the customized way of dealing with errors was no longer supported by try() but is supported by tryCatch(). 
 
 # This function makes a 2 km grid over the extent of bgcs, and fills it with a dummy variable (1L), converts to a spatial vector. It extracts elevation at the grid points using bilinear interpolation. 
-coords <- makePointCoords(bgcs, elev, crs = "EPSG:3005") |>
+coords <- makePointCoords(bgcs, elev) |>
   Cache()
 nrow(coords) # Results in 2209233 points. 
 
@@ -78,8 +79,7 @@ coords <- coords[!is.na(elev),]
 nrow(coords) # Retains 1955328 points. 
 
 # Define the full training area:
-trainingarea <- ext(c(-1250000, -1120000, 430000, 550000))
-# trainingarea <- ext(c(-125, -112, 43, 55))
+trainingarea <- ext(c(-125, -112, 43, 55))
 
 range(coords$x)
 range(coords$y)
