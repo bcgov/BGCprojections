@@ -9,6 +9,8 @@ output:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, message = FALSE)
+
+# Require either installs and loads packages if they haven't been installed, or just loads them if they are already installed.
 Require::Require(c(
   "bcgov/climr@main", 
   "caret", 
@@ -27,9 +29,11 @@ Require::Require(c(
   "tidymodels"
 ))
 
+# Set default cache directories for the reproducible and climr packages (where intermediate results/downloaded data will be stored): 
 options(reproducible.cachePath = "reproducible.cache/",
         climr.cache.path = "climr.cache/")
 
+# Source functions from the 'utils' package: 
 source("R/utils.R")
 
 ## not working. Destany will sen email to admin
@@ -58,17 +62,50 @@ bgcs <- st_read("C:/Users/dobrist/Government of BC/Future Forest Ecosystems Cent
 # elev <- rast("//objectstore2.nrs.bcgov/ffec/DEM/DEM_NorAm/NA_Elevation/data/northamerica/northamerica_elevation_cec_2023.tif")
 elev <- rast("C:/Users/dobrist/Government of BC/Future Forest Ecosystems Centre - CCISS - CCISS/BGCProjections/Proxy_ObjectStorage/DEM/DEM_NorAm/NA_Elevation/data/northamerica/northamerica_elevation_cec_2023.tif")
 
+# NOTE: I (Deb) made a change in the makePointCoords function (turned try() into tryCatch() in line 22 of utils.R due to an error message. It looks like the customized way of dealing with errors was no longer supported by try() but is supported by tryCatch(). 
+
+# This function makes a 2 km grid over the extent of bgcs, and fills it with a dummy variable (1L), converts to a spatial vector. It extracts elevation at the grid points using bilinear interpolation. 
 coords <- makePointCoords(bgcs, elev) |>
   Cache()
-coords <- coords[!is.na(elev),]
+nrow(coords) # Results in 2209233 points. 
 
-## full training area
+# Remove those with NAs for elevation: 
+coords <- coords[!is.na(elev),]
+nrow(coords) # Retains 1655394 points. 
+
+# Define the full training area:
 trainingarea <- ext(c(-125, -112, 43, 55))
+
+# This crops the coordinates to the training area defined above: 
 coords_train <- subsetByExtent(coords, trainingarea)
 
-## make subsets of the study area for hold-outs (gaps)
-studyarea <- ext(c(-123, -117, 49, 52.5))
+# This throws an error message: Error: [vect] the variable name(s) in argument 'geom' are not in 'x'
+
+# Try renaming lon and lat?
+setnames(coords, old = c("lon", "lat"), new = c("x", "y"))
+
+# Try it again:
+coords_train <- subsetByExtent(coords, trainingarea)
+
+# Ok now it runs but I get a warning that there are no points left. 
+range(coords$x)
+range(coords$y)
+
+# I think I just need to modify the training area coordinates to have the same numbers of zeros as coords:
+# Define the full training area:
+trainingarea <- ext(c(-1250000, -1120000, 430000, 550000))
+
+# Try it again:
+coords_train <- subsetByExtent(coords, trainingarea)
+
+# These look like reasonable BC/Western NA coordinates. 
+range(coords_train$x)
+range(coords_train$y)
+
+## make subsets of the study area for hold-outs (gaps) (Deb: also going to add zeros to these)
+studyarea <- ext(c(-1230000, -1170000, 490000, 525000))
 gapextents <- makeGapExtents(studyarea, 5L)
+
 ## convert to poly
 gap_poly <- lapply(gapextents, vect, crs = "EPSG:4326")
 gap_poly <- do.call(rbind, gap_poly)
