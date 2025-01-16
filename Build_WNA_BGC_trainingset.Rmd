@@ -60,7 +60,11 @@ Points from a 4km hex grid of western north america are generated in R and submi
 bgcs <- st_read("C:/Users/dobrist/Government of BC/Future Forest Ecosystems Centre - CCISS - CCISS/BGCProjections/Proxy_ObjectStorage/CCISS_Working/WNA_BGC/WNA_BGC_v12_5Apr2022/WNA_BGC_v12_5Apr2022.gpkg")
 
 # elev <- rast("//objectstore2.nrs.bcgov/ffec/DEM/DEM_NorAm/NA_Elevation/data/northamerica/northamerica_elevation_cec_2023.tif")
-elev <- rast("C:/Users/dobrist/Government of BC/Future Forest Ecosystems Centre - CCISS - CCISS/BGCProjections/Proxy_ObjectStorage/DEM/DEM_NorAm/NA_Elevation/data/northamerica/northamerica_elevation_cec_2023.tif")
+# Use 800 m DEM instead: 
+elev <- rast("C:/Users/dobrist/Government of BC/Future Forest Ecosystems Centre - CCISS - CCISS/BGCProjections/Proxy_ObjectStorage/DEM/DEM_Composite_WNA_800m/composite_WNA_dem.tif")
+ 
+# Project elev to Albers.
+elev <- project(elev, bgcs)
 
 # NOTE: I (Deb) made a change in the makePointCoords function (turned try() into tryCatch() in line 22 of utils.R due to an error message. It looks like the customized way of dealing with errors was no longer supported by try() but is supported by tryCatch(). 
 
@@ -76,34 +80,15 @@ nrow(coords) # Retains 1655394 points.
 # Define the full training area:
 trainingarea <- ext(c(-125, -112, 43, 55))
 
+# Need to rename lon and lat to work with subsetByExtent(): 
+setnames(coords, old = c("lon", "lat"), new = c("x", "y"))
+
 # This crops the coordinates to the training area defined above: 
 coords_train <- subsetByExtent(coords, trainingarea)
 
-# This throws an error message: Error: [vect] the variable name(s) in argument 'geom' are not in 'x'
-
-# Try renaming lon and lat?
-setnames(coords, old = c("lon", "lat"), new = c("x", "y"))
-
-# Try it again:
-coords_train <- subsetByExtent(coords, trainingarea)
-
-# Ok now it runs but I get a warning that there are no points left. 
-range(coords$x)
-range(coords$y)
-
-# I think I just need to modify the training area coordinates to have the same numbers of zeros as coords:
-# Define the full training area:
-trainingarea <- ext(c(-1250000, -1120000, 430000, 550000))
-
-# Try it again:
-coords_train <- subsetByExtent(coords, trainingarea)
-
-# These look like reasonable BC/Western NA coordinates. 
-range(coords_train$x)
-range(coords_train$y)
-
-## make subsets of the study area for hold-outs (gaps) (Deb: also going to add zeros to these)
-studyarea <- ext(c(-1230000, -1170000, 490000, 525000))
+## make subsets of the study area for hold-outs (gaps):
+# This code makes rectangular gap extents within the bounding box of the study area. 5L is the default number of gaps to create. 
+studyarea <- ext(c(-123, -117, 49, 525))
 gapextents <- makeGapExtents(studyarea, 5L)
 
 ## convert to poly
