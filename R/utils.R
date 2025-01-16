@@ -19,7 +19,7 @@
 #' @importFrom data.table setDT
 makePointCoords <- function(bgc_poly, elev, gridSize = 2000, crs = "EPSG:4326") {
   if (!is(bgc_poly, "SpatVector")) {
-    bgc_poly <- try(vect(bgc_poly), error = function(e) e)
+    bgc_poly <- tryCatch(vect(bgc_poly), error = function(e) e)
     if (is(bgc_poly, "simple-error")) {
       stop("Can't coherce bgc_poly to SpatVector. Please pass a SpatVector or another cohercible object class.")
     }
