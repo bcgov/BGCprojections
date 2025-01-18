@@ -111,13 +111,13 @@ coords_trainWgaps <- coords_trainWgaps[clim_vars[, .(id)], on = "id", nomatch = 
 clim_vars <- left_join(clim_vars, coords_train, relationship = "many-to-many") %>% 
   distinct()
 
+# clim_vars_Wgaps <- left_join(clim_vars, coords_trainWGaps, relationship = "many-to-many") %>% 
+#  distinct()
+
 # Figure out which BGC each point is in. 
 # Turn data.table object into a SpatVector:
 coords_train_vect <- vect(coords_train, geom = c("lon", "lat"), crs = crs(bgcs))
-points(coords_train_vect, col = "red")
-# Extract values (BGC) at point locations: 
-# S4 method for class 'SpatVector,SpatVector'
-# extract(x, y)
 
-test <- extract(bgcs, coords_train_vect)
+# Extract values (BGC) at point locations: 
+test <- terra::extract(bgcs, coords_train_vect)
 
