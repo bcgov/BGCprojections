@@ -19,11 +19,11 @@ options(reproducible.cachePath = "reproducible.cache/",
 
 #### Create training points: ####
 # Load in BGC polygons: 
-bgcs <- vect("C:/Users/dobrist/Government of BC/Future Forest Ecosystems Centre - CCISS - CCISS/BGCProjections/Proxy_ObjectStorage/CCISS_Working/WNA_BGC/WNA_BGC_v12_5Apr2022/WNA_BGC_v12_5Apr2022.gpkg")
+bgcs <- vect("C:/Users/CMAHONY/Government of BC/Future Forest Ecosystems Centre - CCISS - CCISS/BGCProjections/Proxy_ObjectStorage/CCISS_Working/WNA_BGC/WNA_BGC_v12_5Apr2022/WNA_BGC_v12_5Apr2022.gpkg")
 # bgcs <- vect("//objectstore2.nrs.bcgov/ffec/CCISS_Working/WNA_BGC/WNA_BGC_v12_5Apr2022/WNA_BGC_v12_5Apr2022.gpkg")
 
 # And the DEM:
-elev <- rast("C:/Users/dobrist/Government of BC/Future Forest Ecosystems Centre - CCISS - CCISS/BGCProjections/Proxy_ObjectStorage/DEM/DEM_Composite_WNA_800m/composite_WNA_dem.tif")
+elev <- rast("C:/Users/CMAHONY/Government of BC/Future Forest Ecosystems Centre - CCISS - CCISS/BGCProjections/Proxy_ObjectStorage/DEM/DEM_Composite_WNA_800m/composite_WNA_dem.tif")
 # elev <- rast("//objectstore2.nrs.bcgov/ffec/DEM/DEM_Composite_WNA_800m/composite_WNA_dem.tif")
 
 # Reproject both to lat/long: 
@@ -147,13 +147,24 @@ clim_vars_gaps <- left_join(clim_vars, coords_gaps, relationship = "many-to-many
 coords_gaps_vect <- vect(coords_gaps, geom = c("lon", "lat"), crs = crs(bgcs))
 
 # Extract values (BGC) at point locations: 
-
-s <- sample(1:dim(coords_gaps)[1], 100)
+s <- sample(1:dim(coords_gaps)[1], 20)
 system.time({
 test <- terra::extract(bgcs, coords_gaps[s, c(2,3)])
 })
 
+#--------CODE FOR DEB
+## attribute BGCs to points
+library(sf)
+bgcs <- st_read("C:/Users/CMAHONY/Government of BC/Future Forest Ecosystems Centre - CCISS - CCISS/BGCProjections/Proxy_ObjectStorage/CCISS_Working/WNA_BGC/WNA_BGC_v12_5Apr2022/WNA_BGC_v12_5Apr2022.gpkg")
 
+s <- sample(1:dim(coords_gaps)[1], 1)
+system.time({
+  points_sf <- st_as_sf(coords_gaps[s,], coords = c("lon", "lat"), crs = 4326)
+  points_sf <- st_transform(points_sf,3005)
+  bgc_att <- st_join(points_sf, bgcs)
+})
+bgc_att <- data.table(st_drop_geometry(bgc_att))
+#-------------------
 
 
 
