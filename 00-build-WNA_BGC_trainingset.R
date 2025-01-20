@@ -8,17 +8,23 @@ library(tidyverse)
 library(terra)
 library(climr)
 library(reproducible) # For Cache function
+library(data.table)
 
 # Source some functions: 
 source("R/utils.R")
 
-#### Get training points: ####
+# Set default cache directories for the reproducible and climr packages (where intermediate results/downloaded data will be stored): 
+options(reproducible.cachePath = "reproducible.cache/",
+        climr.cache.path = "climr.cache/")
 
-# Create new file paths for Deb's temporary data location: 
+#### Create training points: ####
+# Load in BGC polygons: 
 bgcs <- vect("C:/Users/dobrist/Government of BC/Future Forest Ecosystems Centre - CCISS - CCISS/BGCProjections/Proxy_ObjectStorage/CCISS_Working/WNA_BGC/WNA_BGC_v12_5Apr2022/WNA_BGC_v12_5Apr2022.gpkg")
+# bgcs <- vect("//objectstore2.nrs.bcgov/ffec/CCISS_Working/WNA_BGC/WNA_BGC_v12_5Apr2022/WNA_BGC_v12_5Apr2022.gpkg")
 
+# And the DEM:
 elev <- rast("C:/Users/dobrist/Government of BC/Future Forest Ecosystems Centre - CCISS - CCISS/BGCProjections/Proxy_ObjectStorage/DEM/DEM_Composite_WNA_800m/composite_WNA_dem.tif")
-
+# elev <- rast("//objectstore2.nrs.bcgov/ffec/DEM/DEM_Composite_WNA_800m/composite_WNA_dem.tif")
 
 # Reproject both to lat/long: 
 bgcs <- project(bgcs, elev)
@@ -68,8 +74,10 @@ plot(elev, alpha = 0.8)
 for(i in 1:5){
   plot(gapextents[[i]], add=T)
 }
-points(x = coords_train$x, y = coords_train$y, col = "black", cex = 0.001)
-points(x = coords_gaps$x, y = coords_gaps$y, col = "grey50", cex = 0.001)
+
+points(x = coords_train$x, y = coords_train$y, col = "grey50", cex = 0.001) # All points
+points(x = coords_gaps$x, y = coords_gaps$y, col = "black", cex = 0.001) # Just the gaps
+points(x = coords_trainWgaps$x, y = coords_trainWgaps$y, col = "white", cex = 0.001) # Everything but the gaps.
 
 #### Get climate variables: ####
 # Define variables needed: 
@@ -87,9 +95,18 @@ coords_train <- coords_train %>%
   rename(lon = x, lat = y) %>% 
   select(id, lon, lat, elev)
 
-# Pull from climr: 
+# Do the same for coords_trainWgaps and coords_gaps
+coords_trainWgaps <- coords_trainWgaps %>% 
+  rename(lon = x, lat = y) %>% 
+  select(id, lon, lat, elev)
+
+coords_gaps <- coords_gaps %>% 
+  rename(lon = x, lat = y) %>% 
+  select(id, lon, lat, elev)
+
+# Pull from climr (just gaps for now? Check w Colin): 
 clim_vars <- downscale(
-  xyz = coords_train,
+  xyz = coords_gaps,
   which_refmap = "refmap_climr", 
   obs_periods = "2001_2020", # Courtney's code has this. 
   gcm_periods = "2021_2040", # I suppose I should do all actually? Come back here.  
@@ -103,21 +120,60 @@ clim_vars <- downscale(
   Cache()
 
 # Subset coords_train and coords_trainWgaps to include only rows where the id column matches an id in clim_vars:
-coords_train <- coords_train[clim_vars[, .(id)], on = "id", nomatch = 0L]
-coords_trainWgaps <- coords_trainWgaps[clim_vars[, .(id)], on = "id", nomatch = 0L]
+# coords_train <- coords_train[clim_vars[, .(id)], on = "id", nomatch = 0L]
+
+coords_gaps <- coords_gaps[clim_vars[, .(id)], on = "id", nomatch = 0L] 
+# Remove duplicates:
+coords_gaps  <- coords_gaps %>% 
+  distinct()
+
+# coords_trainWgaps <- coords_trainWgaps[clim_vars[, .(id)], on = "id", nomatch = 0L]
 
 # Assess climate variability within BGCs:
 # First, add long, lat, and elevation back in: 
-clim_vars <- left_join(clim_vars, coords_train, relationship = "many-to-many") %>% 
-  distinct()
-
-# clim_vars_Wgaps <- left_join(clim_vars, coords_trainWGaps, relationship = "many-to-many") %>% 
+# clim_vars_all <- left_join(clim_vars, coords_train, relationship = "many-to-many") %>% 
 #  distinct()
+
+# clim_vars_Wgaps <- left_join(clim_vars, coords_trainWgaps, relationship = "many-to-many") %>% 
+#  distinct()
+
+clim_vars_gaps <- left_join(clim_vars, coords_gaps, relationship = "many-to-many") %>% 
+ distinct() 
 
 # Figure out which BGC each point is in. 
 # Turn data.table object into a SpatVector:
-coords_train_vect <- vect(coords_train, geom = c("lon", "lat"), crs = crs(bgcs))
+# coords_train_vect <- vect(coords_train, geom = c("lon", "lat"), crs = crs(bgcs))
+# coords_trainWgaps_vect <- vect(coords_trainWgaps, geom = c("lon", "lat"), crs = crs(bgcs))
+coords_gaps_vect <- vect(coords_gaps, geom = c("lon", "lat"), crs = crs(bgcs))
 
 # Extract values (BGC) at point locations: 
-test <- terra::extract(bgcs, coords_train_vect)
+test <- terra::extract(bgcs, coords_gaps_vect)
 
+# Once I have the BGCs for each point, I can see which BGCs are bad and filter those out: 
+# BGC_counts <- clim_vars_gaps[, .(Num = .N), by = .(BGC)]   ## (Not sure what the criteria used here is)
+
+# Define bad BGCs and remove them: 
+badbgcs <- c("BWBSvk", "ICHmc1a", "MHun", "SBSun", "ESSFun", "SWBvk","MSdm3","ESSFdc3", "IDFdxx_WY", "MSabS", "FGff", "JPWmk_WY" )#, "ESSFab""CWHws2", "CWHwm", "CWHms1" , 
+trainData <- trainData[!BGC %in% badbgcs,]
+
+## set alpha for removal of outliers (2.5% = 3SD)
+trainData <- removeOutlier(as.data.frame(trainData), alpha = .025, vars = vs_final) |>
+  Cache()
+
+# Remove very small sample units: 
+trainData <- rmLowSampleBGCs(trainData) |>
+  Cache()
+
+# Subsample "oversampled" BGCs: 
+dataBalance_recipe <- recipe(BGC ~ ., data =  trainData) |>
+  step_downsample(BGC, under_ratio = 90) |>  ## subsamples "oversampled" BGCs
+  prep()
+
+## extract data.table
+trainData_balanced <- dataBalance_recipe |>
+  juice() |>
+  as.data.table()
+
+# Train ranger random forest model: 
+
+# BGC_Nums <- trainData_balanced[,.(Num = .N), by = BGC]   ## for inspection
