@@ -147,7 +147,17 @@ clim_vars_gaps <- left_join(clim_vars, coords_gaps, relationship = "many-to-many
 coords_gaps_vect <- vect(coords_gaps, geom = c("lon", "lat"), crs = crs(bgcs))
 
 # Extract values (BGC) at point locations: 
-test <- terra::extract(bgcs, coords_gaps_vect)
+
+s <- sample(1:dim(coords_gaps)[1], 100)
+system.time({
+test <- terra::extract(bgcs, coords_gaps[s, c(2,3)])
+})
+
+
+
+
+
+
 
 # Once I have the BGCs for each point, I can see which BGCs are bad and filter those out: 
 # BGC_counts <- clim_vars_gaps[, .(Num = .N), by = .(BGC)]   ## (Not sure what the criteria used here is)
