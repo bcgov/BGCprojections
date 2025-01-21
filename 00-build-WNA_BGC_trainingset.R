@@ -9,6 +9,7 @@ library(terra)
 library(climr)
 library(reproducible) # For Cache function
 library(data.table)
+library(sf)
 
 # Source some functions: 
 source("R/utils.R")
@@ -19,45 +20,85 @@ options(reproducible.cachePath = "reproducible.cache/",
 
 #### Create training points: ####
 # Load in BGC polygons: 
-bgcs <- vect("C:/Users/CMAHONY/Government of BC/Future Forest Ecosystems Centre - CCISS - CCISS/BGCProjections/Proxy_ObjectStorage/CCISS_Working/WNA_BGC/WNA_BGC_v12_5Apr2022/WNA_BGC_v12_5Apr2022.gpkg")
-# bgcs <- vect("//objectstore2.nrs.bcgov/ffec/CCISS_Working/WNA_BGC/WNA_BGC_v12_5Apr2022/WNA_BGC_v12_5Apr2022.gpkg")
+bgcs <- st_read("C:/Users/dobrist/Government of BC/Future Forest Ecosystems Centre - CCISS - CCISS/BGCProjections/Proxy_ObjectStorage/CCISS_Working/WNA_BGC/WNA_BGC_v12_5Apr2022/WNA_BGC_v12_5Apr2022.gpkg")
+# bgcs <- st_read("//objectstore2.nrs.bcgov/ffec/CCISS_Working/WNA_BGC/WNA_BGC_v12_5Apr2022/WNA_BGC_v12_5Apr2022.gpkg")
+
 
 # And the DEM:
-elev <- rast("C:/Users/CMAHONY/Government of BC/Future Forest Ecosystems Centre - CCISS - CCISS/BGCProjections/Proxy_ObjectStorage/DEM/DEM_Composite_WNA_800m/composite_WNA_dem.tif")
+elev <- rast("C:/Users/dobrist/Government of BC/Future Forest Ecosystems Centre - CCISS - CCISS/BGCProjections/Proxy_ObjectStorage/DEM/DEM_Composite_WNA_800m/composite_WNA_dem.tif")
 # elev <- rast("//objectstore2.nrs.bcgov/ffec/DEM/DEM_Composite_WNA_800m/composite_WNA_dem.tif")
 
-# Reproject both to lat/long: 
-bgcs <- project(bgcs, elev)
+# Reproject elev to Albers: 
+elev <- project(elev, crs(bgcs))
 
-# Define smaller study area for script building purposes: 
+# Define smaller study area for script building purposes. These are the extents in lat/long. Want them in Albers instead.
+
 # Remove this later and run script on training area instead. 
-trainingarea <- ext(c(-125, -112, 43, 55))
+# trainingarea <- ext(c(-125, -112, 43, 55))
 studyarea <- ext(c(-123, -117, 49, 52.5))
 
+# Create a SpatRaster to represent the extents in lat/long
+# dummy_raster <- rast(ext = trainingarea, crs = "EPSG:4326", res = 0.1)
+dummy_raster <- rast(ext = studyarea, crs = "EPSG:4326", res = 0.1)  
+
+# Reproject the dummy raster to Albers (EPSG:3005)
+dummy_raster_albers <- project(dummy_raster, "EPSG:3005")
+
+# Extract the reprojected extents
+studyarea_albers <- ext(dummy_raster_albers)
+
 # Crop the elev DEM and bgcs to just the smaller study area for faster execution: 
-elev <- crop(elev, studyarea)
-bgcs <- crop(bgcs, studyarea)
+elev <- crop(elev, studyarea_albers)
+bgcs <- st_crop(bgcs, studyarea_albers)
 
 # From climr documentation: "Since climr is meant to be used to downscale climate variables in land, we will “clip” (set values outside the polygon to NAs) the raster using a land-only polygonRemove areas with water: * Confirm that I need to do this!* 
 # elev <- mask(elev, bgcs)
 
 # This function makes a grid over the extent of bgcs, and fills it with a dummy variable (1L), converts to a spatial vector. It extracts elevation at the grid points using bilinear interpolation. 
 # Using gridSize = 0.018 for now because that's roughly 2 km latitude (but only 1.18 km longitude): 
-coords <- makePointCoords(bgcs, elev, gridSize = 0.018) |>
+coords <- makePointCoords(bgcs, elev, gridSize = 2000) |>
   Cache()
 
-# Need to rename lon and lat to x and y to work with subsetByExtent(): 
+# Need to rename lon and lat to x and y to work with subsetByExtent(), and because they are in Albers, not lat/long: 
 setnames(coords, old = c("lon", "lat"), new = c("x", "y"))
+
+# Extract BGC data from bgcs polygons and append as column to coords data:
+points_sf <- st_as_sf(coords, coords = c("x", "y"), crs = 3005)
+# points_sf <- st_transform(points_sf,3005) # Don't need because already 3005
+bgc_att <- st_join(points_sf, bgcs)
+bgc_att <- data.table(st_drop_geometry(bgc_att))
+
+# bgc_att has 48108 unique IDs but 48108 rows. 
+length(unique(bgc_att$id))
+nrow(bgc_att)
+bgc_att[duplicated(bgc_att$id), ] # 4979, 4980, 10485, and 46026 are duplicated. 
+
+# REMOVE DUPLICATES FOR NOW: 
+bgc_att[bgc_att$id == 4979, ]
+bgc_att[bgc_att$id == 4980, ]
+bgc_att[bgc_att$id == 10485, ]
+bgc_att[bgc_att$id == 46026, ]
+
+# Remove duplicates for now: 
+
+
+# Summarize how many points in each  BGC, for now, retain only those where N > 10 for now:  
+BGC_counts <- bgc_att[, .(Num = .N), by = .(BGC)] 
+BGC_counts <- BGC_counts[Num >= 10]
+bgc_att_filtered <- bgc_att[BGC %in% BGC_counts$BGC]
+
+# Merge coords and BGC data from bgc_att: 
+coords2 <- merge(coords, bgc_att_filtered, by = c("id", "elev"))
 
 # This crops the coordinates to the study area defined above: 
 # Note: coords_train will be identical to coords for now since I already cropped to the size of the smaller study area earlier but when I rerun with entire training area, it will be different. 
-coords_train <- subsetByExtent(coords, studyarea)
+coords_train <- subsetByExtent(coords2, studyarea_albers)
 
 # Make rectangular gap extents within the bounding box of the study area. 5L is the default number of gaps to create. 
-gapextents <- makeGapExtents(studyarea, 5L)
+gapextents <- makeGapExtents(studyarea_albers, 5L)
 
 # Converts list of spatial extents into to polygons: 
-gap_poly <- lapply(gapextents, vect, crs = "EPSG:4326")
+gap_poly <- lapply(gapextents, vect, crs = "EPSG:3005")
 
 # Combines all individual polygons into one spatial object. 
 gap_poly <- do.call(rbind, gap_poly)
@@ -79,7 +120,30 @@ points(x = coords_train$x, y = coords_train$y, col = "grey50", cex = 0.001) # Al
 points(x = coords_gaps$x, y = coords_gaps$y, col = "black", cex = 0.001) # Just the gaps
 points(x = coords_trainWgaps$x, y = coords_trainWgaps$y, col = "white", cex = 0.001) # Everything but the gaps.
 
+# Recombine coords_gaps and coords_trainingWgaps but with an extra column for "Gap = Yes or No". 
+coords_gaps[, gap := "yes"]
+coords_trainWgaps[, gap:= "no"]
+
+coords_all <- rbind(coords_gaps, coords_trainWgaps)
+
 #### Get climate variables: ####
+# coords_all must be in lat/long to work with climr. First, make it into a SpatVector: 
+coords_spat <- vect(coords_all, geom = c("x", "y"), crs = "EPSG:3005")
+
+# Reproject to lat/long: epgs 4326:
+coords_spat_latlong <- project(coords_spat, "EPSG:4326")
+
+# Extract the transformed coordinates (longitude and latitude)
+coords_latlong <- as.data.table(geom(coords_spat_latlong))
+
+# Add the transformed lon and lat columns back to coords_all: 
+coords_all[, c("lon", "lat") := .(coords_latlong$x, coords_latlong$y)]
+
+# coords_all must have the following column names for climr: id, lon, lat, elev: 
+coords_all <- coords_all %>% 
+#  rename(lon = x, lat = y) %>% 
+  select(id, lon, lat, elev, BGC, gap, x, y)
+
 # Define variables needed: 
 # First, just simply PPT, Tmax, Tmin: 
 vars_simple <- c("PPT", "Tmax", "Tmin")
@@ -90,23 +154,9 @@ vars_more <- c("DD5", "DD_0_at", "DD_0_wt", "PPT05", "PPT06", "PPT07", "PPT08",
 
 # All for pairwise variable selection? *Come back to this.*
 
-# coords_train must have the following column names for climr: id, lon, lat, elev: 
-coords_train <- coords_train %>% 
-  rename(lon = x, lat = y) %>% 
-  select(id, lon, lat, elev)
-
-# Do the same for coords_trainWgaps and coords_gaps
-coords_trainWgaps <- coords_trainWgaps %>% 
-  rename(lon = x, lat = y) %>% 
-  select(id, lon, lat, elev)
-
-coords_gaps <- coords_gaps %>% 
-  rename(lon = x, lat = y) %>% 
-  select(id, lon, lat, elev)
-
 # Pull from climr (just gaps for now? Check w Colin): 
 clim_vars <- downscale(
-  xyz = coords_gaps,
+  xyz = coords_all,
   which_refmap = "refmap_climr", 
   obs_periods = "2001_2020", # Courtney's code has this. 
   gcm_periods = "2021_2040", # I suppose I should do all actually? Come back here.  
@@ -138,7 +188,7 @@ coords_gaps  <- coords_gaps %>%
 #  distinct()
 
 clim_vars_gaps <- left_join(clim_vars, coords_gaps, relationship = "many-to-many") %>% 
- distinct() 
+  distinct() 
 
 # Figure out which BGC each point is in. 
 # Turn data.table object into a SpatVector:
@@ -149,24 +199,8 @@ coords_gaps_vect <- vect(coords_gaps, geom = c("lon", "lat"), crs = crs(bgcs))
 # Extract values (BGC) at point locations: 
 s <- sample(1:dim(coords_gaps)[1], 20)
 system.time({
-test <- terra::extract(bgcs, coords_gaps[s, c(2,3)])
+  test <- terra::extract(bgcs, coords_gaps[s, c(2,3)])
 })
-
-#--------CODE FOR DEB
-## attribute BGCs to points
-library(sf)
-bgcs <- st_read("C:/Users/CMAHONY/Government of BC/Future Forest Ecosystems Centre - CCISS - CCISS/BGCProjections/Proxy_ObjectStorage/CCISS_Working/WNA_BGC/WNA_BGC_v12_5Apr2022/WNA_BGC_v12_5Apr2022.gpkg")
-
-s <- sample(1:dim(coords_gaps)[1], 1)
-system.time({
-  points_sf <- st_as_sf(coords_gaps[s,], coords = c("lon", "lat"), crs = 4326)
-  points_sf <- st_transform(points_sf,3005)
-  bgc_att <- st_join(points_sf, bgcs)
-})
-bgc_att <- data.table(st_drop_geometry(bgc_att))
-#-------------------
-
-
 
 
 
