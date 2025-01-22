@@ -10,6 +10,11 @@ library(climr)
 library(reproducible) # For Cache function
 library(data.table)
 library(sf)
+library(foreach) # for outlier removal function
+library(tidymodels) # for prep() function from recipes package. 
+library(themis) # for step_downsample() function
+library(ranger) # For RF
+library(caret) # For confusionMatrix()
 
 # Source some functions: 
 source("R/utils.R")
@@ -38,7 +43,6 @@ elev <- project(elev, crs(bgcs))
 studyarea <- ext(c(-123, -117, 49, 52.5))
 
 # Create a SpatRaster to represent the extents in lat/long
-# dummy_raster <- rast(ext = trainingarea, crs = "EPSG:4326", res = 0.1)
 dummy_raster <- rast(ext = studyarea, crs = "EPSG:4326", res = 0.1)  
 
 # Reproject the dummy raster to Albers (EPSG:3005)
@@ -68,39 +72,48 @@ points_sf <- st_as_sf(coords, coords = c("x", "y"), crs = 3005)
 bgc_att <- st_join(points_sf, bgcs)
 bgc_att <- data.table(st_drop_geometry(bgc_att))
 
-# bgc_att has 48108 unique IDs but 48108 rows. 
+# bgc_att has 48108 unique IDs but 48112 rows. 
 length(unique(bgc_att$id))
 nrow(bgc_att)
-bgc_att[duplicated(bgc_att$id), ] # 4979, 4980, 10485, and 46026 are duplicated. 
+bgc_att[duplicated(bgc_att$id), ] # ids 4979, 4980, 10485, and 46026 are duplicated. 
 
-# REMOVE DUPLICATES FOR NOW: 
-bgc_att[bgc_att$id == 4979, ]
-bgc_att[bgc_att$id == 4980, ]
-bgc_att[bgc_att$id == 10485, ]
-bgc_att[bgc_att$id == 46026, ]
+bgc_duplicates <- bgc_att[bgc_att$id %in% c(4979, 4980, 10485, 46026), ]
+bgc_duplicates <- merge(bgc_duplicates, coords, by = c("id", "elev"))
+
+# Check what's going on with these duplicates: 
+checkarea <- ext(c(1651994 - 1000, 1651994 + 1000, 779989.6 - 10000, 779989.6 + 10000)) # xmin, xmax, ymin, ymax
+bgcs_check <- st_crop(bgcs, checkarea)
+plot(bgcs_check, xlim = c(min(checkarea[1]), max(checkarea[2])), 
+     ylim = c(min(checkarea[3]), max(checkarea[4]))) 
+points(x = bgc_duplicates$x[c(5, 6)], y = bgc_duplicates$y[c(5, 6)], col = "black", pch = 16)
 
 # Remove duplicates for now: 
+bgc_att <- unique(bgc_att, by = "id")
 
+# Also remove rows where BGC is NA: 
+bgc_att <- bgc_att[!is.na(bgc_att$BGC), ]
 
-# Summarize how many points in each  BGC, for now, retain only those where N > 10 for now:  
+# Summarize how many points in each  BGC. For now, retain only those where N > 10:  
+# Will need to check what the numbers are like when using the full extent. 
+# NOTE - might not be necessary as there is a utils function to do this later on. 
 BGC_counts <- bgc_att[, .(Num = .N), by = .(BGC)] 
-BGC_counts <- BGC_counts[Num >= 10]
+# BGC_counts <- BGC_counts[Num >= 10]
 bgc_att_filtered <- bgc_att[BGC %in% BGC_counts$BGC]
 
 # Merge coords and BGC data from bgc_att: 
 coords2 <- merge(coords, bgc_att_filtered, by = c("id", "elev"))
 
-# This crops the coordinates to the study area defined above: 
+# Crops the coordinates to the study area defined above: 
 # Note: coords_train will be identical to coords for now since I already cropped to the size of the smaller study area earlier but when I rerun with entire training area, it will be different. 
 coords_train <- subsetByExtent(coords2, studyarea_albers)
 
 # Make rectangular gap extents within the bounding box of the study area. 5L is the default number of gaps to create. 
 gapextents <- makeGapExtents(studyarea_albers, 5L)
 
-# Converts list of spatial extents into to polygons: 
+# Convert list of spatial extents into to polygons: 
 gap_poly <- lapply(gapextents, vect, crs = "EPSG:3005")
 
-# Combines all individual polygons into one spatial object. 
+# Combine all individual polygons into one spatial object. 
 gap_poly <- do.call(rbind, gap_poly)
 
 # Filters points in coords that fall within the gap polygons.
@@ -120,9 +133,9 @@ points(x = coords_train$x, y = coords_train$y, col = "grey50", cex = 0.001) # Al
 points(x = coords_gaps$x, y = coords_gaps$y, col = "black", cex = 0.001) # Just the gaps
 points(x = coords_trainWgaps$x, y = coords_trainWgaps$y, col = "white", cex = 0.001) # Everything but the gaps.
 
-# Recombine coords_gaps and coords_trainingWgaps but with an extra column for "Gap = Yes or No". 
-coords_gaps[, gap := "yes"]
-coords_trainWgaps[, gap:= "no"]
+# Recombine coords_gaps and coords_trainingWgaps but with an extra column for "gap = 0 or 1" for holdouts. 
+coords_gaps[, gap := "0"]
+coords_trainWgaps[, gap:= "1"]
 
 coords_all <- rbind(coords_gaps, coords_trainWgaps)
 
@@ -141,7 +154,7 @@ coords_all[, c("lon", "lat") := .(coords_latlong$x, coords_latlong$y)]
 
 # coords_all must have the following column names for climr: id, lon, lat, elev: 
 coords_all <- coords_all %>% 
-#  rename(lon = x, lat = y) %>% 
+  #  rename(lon = x, lat = y) %>% 
   select(id, lon, lat, elev, BGC, gap, x, y)
 
 # Define variables needed: 
@@ -169,53 +182,32 @@ clim_vars <- downscale(
   cache = TRUE)|>
   Cache()
 
-# Subset coords_train and coords_trainWgaps to include only rows where the id column matches an id in clim_vars:
-# coords_train <- coords_train[clim_vars[, .(id)], on = "id", nomatch = 0L]
+# Subset coords_all to include only rows where the id column matches an id in clim_vars: * Not sure exactly why we need to do this - I guess in case there are some cases where climr didn't have data for all coordinates?
+coords_all <- coords_all[clim_vars[, .(id)], on = "id", nomatch = 0L] 
 
-coords_gaps <- coords_gaps[clim_vars[, .(id)], on = "id", nomatch = 0L] 
 # Remove duplicates:
-coords_gaps  <- coords_gaps %>% 
+coords_all  <- coords_all %>% 
   distinct()
 
-# coords_trainWgaps <- coords_trainWgaps[clim_vars[, .(id)], on = "id", nomatch = 0L]
+#### Assess climate variability within BGCs: ####
+# First, add long, lat, elevation, BGC, x, y, and gap back in (239950 rows): 
+trainData <- left_join(clim_vars, coords_all, relationship = "many-to-many") %>%
+  distinct()
 
-# Assess climate variability within BGCs:
-# First, add long, lat, and elevation back in: 
-# clim_vars_all <- left_join(clim_vars, coords_train, relationship = "many-to-many") %>% 
-#  distinct()
+# For now, just look at the reference period: 
+trainData <- trainData[PERIOD == "1961_1990"]
 
-# clim_vars_Wgaps <- left_join(clim_vars, coords_trainWgaps, relationship = "many-to-many") %>% 
-#  distinct()
+# Which BGCs from a climr data perspective? Filter those out: 
 
-clim_vars_gaps <- left_join(clim_vars, coords_gaps, relationship = "many-to-many") %>% 
-  distinct() 
+# Define bad BGCs and remove them: (These were selected in the RMarkdown script but I'm not sure why.) 
+# badbgcs <- c("BWBSvk", "ICHmc1a", "MHun", "SBSun", "ESSFun", "SWBvk","MSdm3","ESSFdc3", "IDFdxx_WY", "MSabS", "FGff", "JPWmk_WY" )#, "ESSFab""CWHws2", "CWHwm", "CWHms1" , 
+# trainData_bad <- trainData[BGC %in% badbgcs,]
 
-# Figure out which BGC each point is in. 
-# Turn data.table object into a SpatVector:
-# coords_train_vect <- vect(coords_train, geom = c("lon", "lat"), crs = crs(bgcs))
-# coords_trainWgaps_vect <- vect(coords_trainWgaps, geom = c("lon", "lat"), crs = crs(bgcs))
-coords_gaps_vect <- vect(coords_gaps, geom = c("lon", "lat"), crs = crs(bgcs))
-
-# Extract values (BGC) at point locations: 
-s <- sample(1:dim(coords_gaps)[1], 20)
-system.time({
-  test <- terra::extract(bgcs, coords_gaps[s, c(2,3)])
-})
-
-
-
-# Once I have the BGCs for each point, I can see which BGCs are bad and filter those out: 
-# BGC_counts <- clim_vars_gaps[, .(Num = .N), by = .(BGC)]   ## (Not sure what the criteria used here is)
-
-# Define bad BGCs and remove them: 
-badbgcs <- c("BWBSvk", "ICHmc1a", "MHun", "SBSun", "ESSFun", "SWBvk","MSdm3","ESSFdc3", "IDFdxx_WY", "MSabS", "FGff", "JPWmk_WY" )#, "ESSFab""CWHws2", "CWHwm", "CWHms1" , 
-trainData <- trainData[!BGC %in% badbgcs,]
-
-## set alpha for removal of outliers (2.5% = 3SD)
-trainData <- removeOutlier(as.data.frame(trainData), alpha = .025, vars = vs_final) |>
+# Set alpha for removal of outliers (2.5% = 3SD): 
+trainData <- removeOutlier(as.data.frame(trainData), alpha = .025, vars = vars_simple) |>
   Cache()
 
-# Remove very small sample units: 
+# Remove very small sample BGC units: 
 trainData <- rmLowSampleBGCs(trainData) |>
   Cache()
 
@@ -229,6 +221,54 @@ trainData_balanced <- dataBalance_recipe |>
   juice() |>
   as.data.table()
 
-# Train ranger random forest model: 
+# Check numbers of BGCs: 
+BGC_Nums <- trainData_balanced[,.(Num = .N), by = BGC]   
 
-# BGC_Nums <- trainData_balanced[,.(Num = .N), by = BGC]   ## for inspection
+# Train ranger random forest model: 
+trainData_balanced[, BGC := as.factor(BGC)]
+
+
+cols <- c("BGC", vars_simple)
+
+BGCmodel_full <- ranger(
+  BGC ~ .,
+  data = trainData_balanced[, ..cols],
+  num.trees = 501,
+  splitrule =  "extratrees",
+  mtry = 2,
+  min.node.size = 2,
+  importance = "permutation",
+ # case.weights = trainData_balanced$gap,
+ # holdout = TRUE,
+  write.forest = TRUE,
+  classification = TRUE,
+  probability = FALSE,
+  
+) |>
+  Cache()
+
+beepr::beep()
+
+trainData_balanced_Wgaps <- trainData_balanced[gap == 1]
+
+BGCmodel_Wgaps <- ranger(
+  BGC ~ .,
+  data = trainData_balanced_Wgaps[, ..cols],
+  num.trees = 501,
+  splitrule =  "extratrees",
+  mtry = 2,
+  min.node.size = 2,
+  importance = "permutation",
+  # case.weights = trainData_balanced$gap,
+  # holdout = TRUE,
+  write.forest = TRUE,
+  classification = TRUE,
+  probability = FALSE,
+  
+) |>
+  Cache()
+
+beepr::beep()
+
+confusionMatrix(data = predictions(BGCmodel_full),
+                reference = trainData_balanced$BGC)
