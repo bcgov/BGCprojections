@@ -25,20 +25,22 @@ options(reproducible.cachePath = "reproducible.cache/",
 
 #### Create training points: ####
 # Load in BGC polygons: 
+# QUESTION 1: What version of the BGC data should I use? 
 bgcs <- st_read("C:/Users/dobrist/Government of BC/Future Forest Ecosystems Centre - CCISS - CCISS/BGCProjections/Proxy_ObjectStorage/CCISS_Working/WNA_BGC/WNA_BGC_v12_5Apr2022/WNA_BGC_v12_5Apr2022.gpkg")
 # bgcs <- st_read("//objectstore2.nrs.bcgov/ffec/CCISS_Working/WNA_BGC/WNA_BGC_v12_5Apr2022/WNA_BGC_v12_5Apr2022.gpkg")
 
 
 # And the DEM:
+# QUESTION 2: Which DEM should I use?  
 elev <- rast("C:/Users/dobrist/Government of BC/Future Forest Ecosystems Centre - CCISS - CCISS/BGCProjections/Proxy_ObjectStorage/DEM/DEM_Composite_WNA_800m/composite_WNA_dem.tif")
 # elev <- rast("//objectstore2.nrs.bcgov/ffec/DEM/DEM_Composite_WNA_800m/composite_WNA_dem.tif")
 
 # Reproject elev to Albers: 
 elev <- project(elev, crs(bgcs))
 
-# Define smaller study area for script building purposes. These are the extents in lat/long. Want them in Albers instead.
+# Define smaller study area for script building purposes. These are the extents in lat/long but we want them in Albers instead.
 
-# Remove this later and run script on training area instead. 
+# Remove this later and run script on entire training area instead. 
 # trainingarea <- ext(c(-125, -112, 43, 55))
 studyarea <- ext(c(-123, -117, 49, 52.5))
 
@@ -55,11 +57,16 @@ studyarea_albers <- ext(dummy_raster_albers)
 elev <- crop(elev, studyarea_albers)
 bgcs <- st_crop(bgcs, studyarea_albers)
 
-# From climr documentation: "Since climr is meant to be used to downscale climate variables in land, we will “clip” (set values outside the polygon to NAs) the raster using a land-only polygonRemove areas with water: * Confirm that I need to do this!* 
+# From climr documentation: "Since climr is meant to be used to downscale climate variables in land, we will “clip” (set values outside the polygon to NAs) the raster using a land-only polygonRemove areas with water: 
+
+# QUESTION 3: Do I need to do this? If so, what is a good land-only polygon to use? If not, what is the justification? (e.g., Colin mentioned that we want some overlap with ocean to make sure we hit islands etc)
 # elev <- mask(elev, bgcs)
 
 # This function makes a grid over the extent of bgcs, and fills it with a dummy variable (1L), converts to a spatial vector. It extracts elevation at the grid points using bilinear interpolation. 
-# Using gridSize = 0.018 for now because that's roughly 2 km latitude (but only 1.18 km longitude): 
+
+# QUESTION 4: Gridsize = 2 km. Are we still happy with this? Justification from RMD is:  
+# "A 2km grid seems to provide enough training points for most BGCs. Large non-vegetation land areas are excluded (lakes and glaciers primarily)."
+# QUESTION 5: Do we want to do this? Or would it be simpler to just extract grid point every 800 m from DEM?
 coords <- makePointCoords(bgcs, elev, gridSize = 2000) |>
   Cache()
 
@@ -80,6 +87,7 @@ bgc_att[duplicated(bgc_att$id), ] # ids 4979, 4980, 10485, and 46026 are duplica
 bgc_duplicates <- bgc_att[bgc_att$id %in% c(4979, 4980, 10485, 46026), ]
 bgc_duplicates <- merge(bgc_duplicates, coords, by = c("id", "elev"))
 
+# QUESTION 6: Figure out what's going on with these duplicates and what to do with them. 
 # Check what's going on with these duplicates: 
 checkarea <- ext(c(1651994 - 1000, 1651994 + 1000, 779989.6 - 10000, 779989.6 + 10000)) # xmin, xmax, ymin, ymax
 bgcs_check <- st_crop(bgcs, checkarea)
@@ -93,11 +101,14 @@ bgc_att <- unique(bgc_att, by = "id")
 # Also remove rows where BGC is NA: 
 bgc_att <- bgc_att[!is.na(bgc_att$BGC), ]
 
-# Summarize how many points in each  BGC. For now, retain only those where N > 10:  
-# Will need to check what the numbers are like when using the full extent. 
-# NOTE - might not be necessary as there is a utils function to do this later on. 
+# Summarize how many points in each  BGC.   
+# Need to check what the numbers are like when using the full extent. 
+# NOTE - this step might not be necessary as there is a utils function to do this later on. 
+
+# QUESTION 7: Does it make more sense to do this here and now or later, after we have climr vars? 
+
 BGC_counts <- bgc_att[, .(Num = .N), by = .(BGC)] 
-# BGC_counts <- BGC_counts[Num >= 10]
+# BGC_counts <- BGC_counts[Num >= 10] # For now, retain only those where N > 10. 
 bgc_att_filtered <- bgc_att[BGC %in% BGC_counts$BGC]
 
 # Merge coords and BGC data from bgc_att: 
@@ -108,6 +119,8 @@ coords2 <- merge(coords, bgc_att_filtered, by = c("id", "elev"))
 coords_train <- subsetByExtent(coords2, studyarea_albers)
 
 # Make rectangular gap extents within the bounding box of the study area. 5L is the default number of gaps to create. 
+
+# QUESTION 8: Is the idea that I will eventually make these gaps over the entire training area (i.e., BC, US, AB) to train a "final" model? 
 gapextents <- makeGapExtents(studyarea_albers, 5L)
 
 # Convert list of spatial extents into to polygons: 
@@ -158,16 +171,22 @@ coords_all <- coords_all %>%
   select(id, lon, lat, elev, BGC, gap, x, y)
 
 # Define variables needed: 
+
+# QUESTION 9: Does it make sense to pull all variables we might want at once, and subset for model later? If so, what are all the relevant variables? 
+
 # First, just simply PPT, Tmax, Tmin: 
 vars_simple <- c("PPT", "Tmax", "Tmin")
 
-# Define a more complex set (ecologically relevant?): 
+# QUESTION 10: These are the variables previously selected. Colin and Kiri mentioned the possibility of testing three subsets of climate variables: seasonal PPT/Tmax/Tmin, a pairwise selection, and an "ecologically relevant" subset. Is this the ecologically relevant subset? If not, what should be included in that instead? 
+# Define a more complex set: 
 vars_more <- c("DD5", "DD_0_at", "DD_0_wt", "PPT05", "PPT06", "PPT07", "PPT08",
                "PPT09", "CMD", "PPT_at", "PPT_wt", "CMD07", "SHM", "AHM", "NFFD", "PAS", "CMI")
 
-# All for pairwise variable selection? *Come back to this.*
+# QUESTION 10: Is there existing code for the "pairwise" variable selection or do I need to come up with this? 
 
-# Pull from climr (just gaps for now? Check w Colin): 
+# QUESTION 11: Lots of questions with this prompt - obs_periods, gcm_periods, gcms, ssps, max_run, really all arguments should be checked. 
+
+# Pull data from climr: 
 clim_vars <- downscale(
   xyz = coords_all,
   which_refmap = "refmap_climr", 
@@ -182,7 +201,8 @@ clim_vars <- downscale(
   cache = TRUE)|>
   Cache()
 
-# Subset coords_all to include only rows where the id column matches an id in clim_vars: * Not sure exactly why we need to do this - I guess in case there are some cases where climr didn't have data for all coordinates?
+# Subset coords_all to include only rows where the id column matches an id in clim_vars: 
+# QUESTION 12: I'm not sure exactly why we need to do this - I guess in case there are some cases where climr didn't have data for all coordinates? Is that possible? 
 coords_all <- coords_all[clim_vars[, .(id)], on = "id", nomatch = 0L] 
 
 # Remove duplicates:
@@ -190,27 +210,31 @@ coords_all  <- coords_all %>%
   distinct()
 
 #### Assess climate variability within BGCs: ####
-# First, add long, lat, elevation, BGC, x, y, and gap back in (239950 rows): 
+# First, add long, lat, elevation, BGC, x, y, and gap back in: 
 trainData <- left_join(clim_vars, coords_all, relationship = "many-to-many") %>%
   distinct()
 
 # For now, just look at the reference period: 
 trainData <- trainData[PERIOD == "1961_1990"]
 
-# Which BGCs from a climr data perspective? Filter those out: 
+# QUESTION 13: Which BGCs should be included or not? Should they be removed based on number of points per BGC, or some metric from the climr data (e.g., CV for parameters within BGCs?) 
 
 # Define bad BGCs and remove them: (These were selected in the RMarkdown script but I'm not sure why.) 
 # badbgcs <- c("BWBSvk", "ICHmc1a", "MHun", "SBSun", "ESSFun", "SWBvk","MSdm3","ESSFdc3", "IDFdxx_WY", "MSabS", "FGff", "JPWmk_WY" )#, "ESSFab""CWHws2", "CWHwm", "CWHms1" , 
 # trainData_bad <- trainData[BGC %in% badbgcs,]
 
 # Set alpha for removal of outliers (2.5% = 3SD): 
+# Question 14: Is this (inc. alpha of 0.025) standard practice? 
 trainData <- removeOutlier(as.data.frame(trainData), alpha = .025, vars = vars_simple) |>
   Cache()
 
-# Remove very small sample BGC units: 
+# QUESTION 14: Ok here it looks like we're removing BGCs where the number of points is less than 30. So what made the "bad" ones bad above? 
+
+# Remove very small sample BGC units:
 trainData <- rmLowSampleBGCs(trainData) |>
   Cache()
 
+# QUESTION 15: How exactly does this work? Just ensures that at most, larger BGCs have at most 90x as many rows as smallest BGC? And randomly selects rows of that to keep? Should we do a sensitivity analysis here? 
 # Subsample "oversampled" BGCs: 
 dataBalance_recipe <- recipe(BGC ~ ., data =  trainData) |>
   step_downsample(BGC, under_ratio = 90) |>  ## subsamples "oversampled" BGCs
@@ -230,6 +254,7 @@ trainData_balanced[, BGC := as.factor(BGC)]
 
 cols <- c("BGC", vars_simple)
 
+ # QUESTION 16: How to decide on parameters here? Also need to figure out why it works when I manually separate holdout(gap) vs non-gap data but when I run within the function it crashes R. 
 BGCmodel_full <- ranger(
   BGC ~ .,
   data = trainData_balanced[, ..cols],
@@ -267,8 +292,25 @@ BGCmodel_Wgaps <- ranger(
   
 ) |>
   Cache()
-
 beepr::beep()
 
-confusionMatrix(data = predictions(BGCmodel_full),
+# QUESTION 17: How do we diagnose the models? What are we "happy" with? Also, what output specifically is required for CCISS? Accuracy/Precision/Recall/F1 score/AUC PR/ROC AUC/etc. 
+# Check the models: 
+conf_matrix_full <- caret::confusionMatrix(data = predictions(BGCmodel_full),
                 reference = trainData_balanced$BGC)
+
+conf_matrix_Wgaps <- caret::confusionMatrix(data = predictions(BGCmodel_Wgaps),
+                       reference = trainData_balanced_Wgaps$BGC)
+
+# Metrics (have not run)
+precision <- conf_matrix_full$byClass["Precision"]
+recall <- conf_matrix_full$byClass["Recall"]
+f1 <- conf_matrix_full$byClass["F1"]
+balanced_accuracy <- conf_matrix_full$byClass["Balanced Accuracy"]
+
+print(BGCmodel_full) # OOB prediction error: 52.91%
+print(BGCmodel_Wgaps) # OOB prediction error: 50.39%
+
+# Save predictions (also need these for leaflet script): 
+predictions_full <- predict(BGCmodel_full, data = trainData_balanced)$predictions
+predictions_Wgaps <- predict(BGCmodel_Wgaps, data = trainData_balanced_Wgaps)$predictions
