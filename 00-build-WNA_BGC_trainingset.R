@@ -57,7 +57,7 @@ studyarea_albers <- ext(dummy_raster_albers)
 elev <- crop(elev, studyarea_albers)
 bgcs <- st_crop(bgcs, studyarea_albers)
 
-# From climr documentation: "Since climr is meant to be used to downscale climate variables in land, we will “clip” (set values outside the polygon to NAs) the raster using a land-only polygonRemove areas with water: 
+# From example in climr documentation: "Since climr is meant to be used to downscale climate variables in land, we will “clip” (set values outside the polygon to NAs) the raster using a land-only polygonRemove areas with water: 
 
 # QUESTION 3: Do I need to do this? If so, what is a good land-only polygon to use? If not, what is the justification? (e.g., Colin mentioned that we want some overlap with ocean to make sure we hit islands etc)
 # elev <- mask(elev, bgcs)
@@ -66,6 +66,7 @@ bgcs <- st_crop(bgcs, studyarea_albers)
 
 # QUESTION 4: Gridsize = 2 km. Are we still happy with this? Justification from RMD is:  
 # "A 2km grid seems to provide enough training points for most BGCs. Large non-vegetation land areas are excluded (lakes and glaciers primarily)."
+
 # QUESTION 5: Do we want to do this? Or would it be simpler to just extract grid point every 800 m from DEM?
 coords <- makePointCoords(bgcs, elev, gridSize = 2000) |>
   Cache()
@@ -177,25 +178,19 @@ coords_all <- coords_all %>%
 # First, just simply PPT, Tmax, Tmin: 
 vars_simple <- c("PPT", "Tmax", "Tmin")
 
-# QUESTION 10: These are the variables previously selected. Colin and Kiri mentioned the possibility of testing three subsets of climate variables: seasonal PPT/Tmax/Tmin, a pairwise selection, and an "ecologically relevant" subset. Is this the ecologically relevant subset? If not, what should be included in that instead? 
+# QUESTION 10: These are the variables previously selected. Colin and Kiri mentioned the possibility of testing three subsets of climate variables: seasonal or monthly PPT/Tmax/Tmin, a pairwise selection, and an "ecologically relevant" subset. Is this the ecologically relevant subset? If not, what should be included in that instead? (Note: check AddVars() function to add more.)
 # Define a more complex set: 
 vars_more <- c("DD5", "DD_0_at", "DD_0_wt", "PPT05", "PPT06", "PPT07", "PPT08",
                "PPT09", "CMD", "PPT_at", "PPT_wt", "CMD07", "SHM", "AHM", "NFFD", "PAS", "CMI")
 
-# QUESTION 10: Is there existing code for the "pairwise" variable selection or do I need to come up with this? 
+# QUESTION 10: Is there existing code for the "pairwise" variable selection? 01-23-25 - https://github.com/bcgov/Build_WNA_BGC_model/blob/development/R/LocalFeatureSelection.R. 
 
-# QUESTION 11: Lots of questions with this prompt - obs_periods, gcm_periods, gcms, ssps, max_run, really all arguments should be checked. 
+# QUESTION 11: Lots of questions with this prompt - obs_periods, gcm_periods, gcms, ssps, max_run? 01-23-25 - Discussed with Kiri - This is all that is required for now. 
 
 # Pull data from climr: 
 clim_vars <- downscale(
   xyz = coords_all,
   which_refmap = "refmap_climr", 
-  obs_periods = "2001_2020", # Courtney's code has this. 
-  gcm_periods = "2021_2040", # I suppose I should do all actually? Come back here.  
-  # gcms = list_gcms()[c(1, 4, 5, 6, 7, 10, 11, 12)], # 8 GCMs recommended in Mahony et al. 2022
-  gcms = "CanESM5", # Just picking one for now to make the left join run faster: 
-  ssps = "ssp245",
-  max_run = 2, # How many should I run? 
   return_refperiod = TRUE, # Also return the 1961-1990 normals period. 
   vars = vars_simple,
   cache = TRUE)|>
@@ -251,10 +246,9 @@ BGC_Nums <- trainData_balanced[,.(Num = .N), by = BGC]
 # Train ranger random forest model: 
 trainData_balanced[, BGC := as.factor(BGC)]
 
-
 cols <- c("BGC", vars_simple)
 
- # QUESTION 16: How to decide on parameters here? Also need to figure out why it works when I manually separate holdout(gap) vs non-gap data but when I run within the function it crashes R. 
+# QUESTION 16: How to decide on parameters here? Also need to figure out why it works when I manually separate holdout(gap) vs non-gap data but when I run within the function it crashes R. 
 BGCmodel_full <- ranger(
   BGC ~ .,
   data = trainData_balanced[, ..cols],
