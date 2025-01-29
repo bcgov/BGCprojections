@@ -23,34 +23,43 @@ addVars <- function(dat){ ##this function modifies everything inplace, so no nee
             TmaxJuly = Tmax07)]
 }
 
-bgc_map <- st_read("D:/OneDrive - Government of BC/WNA_BGC - Future Forest Ecosystems Centre/ccissv13_files/WNA_BGC_v13_15Nov2024.gpkg") %>% dplyr::filter(!BGC == "(None)")
+bgc_map <- st_read("C:/Users/dobrist/Government of BC/Future Forest Ecosystems Centre - CCISS - CCISS/ccissv13_workingfiles/BGC_modelling/WNA_BGC_v13_15Nov2024.gpkg") %>% dplyr::filter(!BGC == "(None)")
 bgc_map$ID <- seq_along(bgc_map$BGC)
 bgcs <- unique(bgc_map$BGC) %>% data.frame
-fwrite(bgcs, "wna_bgcs.csv")
+# fwrite(bgcs, "wna_bgcs.csv")
 
-bgc_info <- fread("D:/OneDrive - Government of BC/WNA_BGC - Future Forest Ecosystems Centre/ccissv13_files/WNA_BGCs_Info_v13_1.csv") %>% filter(BGC %in% bgcs$.) #%>% mutate(bgc = as.factor(BGC))
+bgc_info <- fread("C:/Users/dobrist/Government of BC/Future Forest Ecosystems Centre - CCISS - CCISS/CCISSv13_latest_tool_materials/WNA_BGCs_Info_v13_1.csv") %>% filter(BGC %in% bgcs$.) #%>% mutate(bgc = as.factor(BGC))
 BC_BGCs <- bgc_info[grep("BGC.*",Source),BGC]
 
 #bgc_map <- st_read("BC_BGCs_with_ID.gpkg")
+length(bgc_info$BGC) # 391
 
-neighbours_ls <- list()
-#for(bgc in BC_BGCs[-(1:180)]){
-for(bgc in bgc_info$BGC){
-  cat(".")
-  focal <- bgc_map[bgc_map$BGC == bgc,]
-  if(nrow(focal) > 0){
-    focal <- st_union(focal$geom)
-    neighbours <- st_intersects(focal, bgc_map)
-    neighbours_ls[[bgc]] <- neighbours[[1]]
-  }
-}
+# For each BGC, determine which other BGCs are touching it, and compile a list. Note: For full set, this takes ~ 55 min: 
+# system.time({
+# neighbours_ls <- list()
+# # for(bgc in BC_BGCs[(1:5)]){
+# for(bgc in bgc_info$BGC){
+#   cat(".")
+#   focal <- bgc_map[bgc_map$BGC == bgc,]
+#   if(nrow(focal) > 0){
+#     focal <- st_union(focal$geom)
+#     neighbours <- st_intersects(focal, bgc_map)
+#     neighbours_ls[[bgc]] <- neighbours[[1]]
+#   }
+# }
+# })
+# beepr::beep()
 
-saveRDS(neighbours_ls,"WNA_BGC_NeighbourList.rds",)
+# saveRDS(neighbours_ls,"WNA_BGC_NeighbourList.rds")
 
-st_write(bgc_map, "WNA_BGCs_with_ID.gpkg", append = FALSE)
+neighbours_ls <- readRDS("WNA_BGC_NeighbourList.rds")
 
-#dem <- terra::rast("D:/CommonTables/DEMs/WNA_DEM_4326_clipped.tif")
-saveRDS(dem, "//objectstore2.nrs.bcgov/ffec/CCISS_Working/WNA_DEM_4326_clippedDEM.rds")
+# st_write(bgc_map, "WNA_BGCs_with_ID.gpkg", append = FALSE)
+
+# Read in DEM: 
+dem <- terra::rast("C:/Users/dobrist/Government of BC/Future Forest Ecosystems Centre - CCISS - CCISS/ccissv13_workingfiles/BGC_modelling/WNA_DEM_4326_clipped.tif")
+
+# saveRDS(dem, "//objectstore2.nrs.bcgov/ffec/CCISS_Working/WNA_DEM_4326_clippedDEM.rds")
 # %>% terra::project("epsg:4326")
 # writeRaster(dem2, "D:/CommonTables/DEMs/WNA_DEM_4326_clipped.tif")
 #dem <- rast("//objectstore2.nrs.bcgov/ffec/DEM/DEM_NorAm/NA_Elevation/data/northamerica/northamerica_elevation_cec_2023.tif")
@@ -60,59 +69,76 @@ saveRDS(dem, "//objectstore2.nrs.bcgov/ffec/CCISS_Working/WNA_DEM_4326_clippedDE
 #dem.noram <- rast("//objectstore2.nrs.bcgov/ffec/DEM/DEM_NorAm/NA_Elevation/data/northamerica/northamerica_elevation_cec_2023.tif")
 #dem <- dem.noram
 
-neighbours_ls <- readRDS("WNA_BGC_NeighbourList.rds")
-remove = c("PPT_at", "PPT_wt", "CMD.def")
-vars.selected <- fread("no_month_vars.csv") %>% dplyr::filter(!vars %in% remove)
+# remove = c("PPT_at", "PPT_wt", "CMD.def") #  Not sure why these were removed. 
+# vars.selected <- fread("no_month_vars.csv") #  %>% dplyr::filter(!vars %in% remove)
 
+# Remove the monthly vars but leave in all seasonal and annual:
+vars.selected  <- data.table(list_vars(set = c("Annual", "Seasonal")))
+
+# Add addVars variables: (To do: need to update to account for changes in naming in climr)
+setnames(vars.selected, "V1", "vars")
+vars.selected <- addVars(vars.selected)
+
+# Create list of names from the neighbours_ls list, and remove any unvegetated (BAFA) or odd to predict (unknown) subzones. 
 bgc_list <- names(neighbours_ls)
-bgc_list <- bgc_list[!grepl("BAFA.* | *.un.", bgc_list)]
-bgc_list <- bgc_list[-1]
+bgc_list <- bgc_list[!grepl("un|BAFA", bgc_list)]
 
-tic()
+vars <- c(vars.selected$vars, "BGC")
 
-vars <- c(vars.selected$vars,"BGC")
 bgc_list_short <- c("BGxh3", "BWBSdk", "CDFmm", "ICHmc1", "CWHmm1", "ESSFwk1","ICHmw1","IDFdk3",
                     "IDFxx2","MSdw","SBSdk","MSxv")
-bgc_list <- bgc_list[-"CWHvm2"]
-tic()
-res_list <- list()
-bgc = "CDFmm"
-for(bgc in bgc_list){
-  cat("Processing",bgc,"\n")
-  out <- bgc_map[bgc_map$ID %in% neighbours_ls[[bgc]],]
-  out_union <- group_by(out, BGC) %>% 
-    summarize(geom = st_union(geom),
-              BGC = BGC[1])
-  pnts <- st_sample(out_union, size = rep(150, nrow(out_union)), type = "random", by_polygon = T)
-  pnts_all <- st_as_sf(data.frame(BGC = rep(out_union$BGC, each = 150), geometry = pnts))
-  pnts_all <- st_transform(pnts_all, 4326)
-  coords <- st_coordinates(pnts_all)
-  temp_elev <- terra::extract(dem, coords)
-  coords.bgc <- data.frame(coords, elev = temp_elev$WNA_DEM_SRT_30m,
-                           ID = 1:nrow(pnts_all), BGC = pnts_all$BGC) %>% rename(lat = Y, lon = X, id = ID) %>% 
-    dplyr::select(lon, lat, elev,id, BGC)
-  coords <- coords.bgc %>%   dplyr::select(lon, lat, elev,id)
-  coords.bgc <- coords.bgc %>% dplyr::select(id, BGC)
-  # coords <- data.frame(coords, elev = temp_elev$WNA_DEM_SRT_30m, 
-  #                      ID = 1:nrow(pnts_all), BGC = pnts_all$BGC)
-  
-  clim_vars <- suppressMessages(climr_downscale(coords, which_normal = "auto", 
-                                                vars = list_variables(), return_normal = T))  
-  clim_vars <- data.table:::na.omit.data.table(clim_vars)
-  addVars(clim_vars)
-  clim_vars <- left_join(clim_vars, coords.bgc)
-  
-  clim_vars <- setDT(clim_vars)[,..vars]
-  
-  clim_vars[,BGC := as.factor(BGC)]
-  rf_mod <- ranger(BGC ~ ., data = clim_vars, num.trees = 101, importance = "impurity", splitrule = "gini")
-  varimp <- sort(importance(rf_mod),decreasing = T)[1:6]
-  res_list[[bgc]] <- data.table(Focal = bgc, Var = names(varimp), 
-                                Importance = unname(varimp), 
-                                OOB = rf_mod$prediction.error,
-                                NumberBGCs = nrow(out_union))
-}
 
+# bgc_list <- bgc_list[-"CWHvm2"]
+
+res_list <- list()
+
+bgc = "CDFmm"
+
+system.time({
+  for(bgc in bgc_list){
+    cat("Processing",bgc,"\n")
+    out <- bgc_map[bgc_map$ID %in% neighbours_ls[[bgc]],]
+    out_union <- group_by(out, BGC) %>% 
+      summarize(geom = st_union(geom),
+                BGC = BGC[1])
+    pnts <- st_sample(out_union, size = rep(150, nrow(out_union)), type = "random", by_polygon = T)
+    pnts_all <- st_as_sf(data.frame(BGC = rep(out_union$BGC, each = 150), geometry = pnts))
+    pnts_all <- st_transform(pnts_all, 4326)
+    coords <- st_coordinates(pnts_all)
+    temp_elev <- terra::extract(dem, coords)
+    coords.bgc <- data.frame(coords, elev = temp_elev$WNA_DEM_3005_clipped,
+                             ID = 1:nrow(pnts_all), BGC = pnts_all$BGC) %>% rename(lat = Y, lon = X, id = ID) %>% 
+      dplyr::select(lon, lat, elev,id, BGC)
+    coords <- coords.bgc %>% dplyr::select(lon, lat, elev,id)
+    coords.bgc <- coords.bgc %>% dplyr::select(id, BGC)
+    # coords <- data.frame(coords, elev = temp_elev$WNA_DEM_SRT_30m, 
+    #                      ID = 1:nrow(pnts_all), BGC = pnts_all$BGC)
+    
+    clim_vars <- climr::downscale(xyz = coords, 
+                                  which_refmap = "refmap_climr", 
+                                  return_refperiod = TRUE, 
+                                  vars = vars.selected$vars,
+                                  cache = TRUE)|>
+      Cache()  
+    clim_vars <- data.table:::na.omit.data.table(clim_vars)
+    # addVars(clim_vars)
+    clim_vars <- left_join(clim_vars, coords.bgc)
+    
+    clim_vars <- setDT(clim_vars)[,..vars]
+    
+    clim_vars[,BGC := as.factor(BGC)]
+    rf_mod <- ranger(BGC ~ ., data = clim_vars, num.trees = 101, importance = "impurity", splitrule = "gini")
+    varimp <- sort(importance(rf_mod),decreasing = T)[1:6]
+    res_list[[bgc]] <- data.table(Focal = bgc, Var = names(varimp), 
+                                  Importance = unname(varimp), 
+                                  OOB = rf_mod$prediction.error,
+                                  NumberBGCs = nrow(out_union))
+  }
+})
+beepr::beep()
+
+setdiff(vars1, vars2)
+setdiff(vars2, vars1)
 
 dat_all2 <- rbindlist(res_list)
 fwrite(dat_all2, "Focal_Variable_Importance_WNAv1.csv")
