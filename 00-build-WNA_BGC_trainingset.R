@@ -142,6 +142,8 @@ coords_trainWgaps[, gap:= "no"]
 
 coords_all <- rbind(coords_gaps, coords_trainWgaps)
 
+#### Local feature selection: ####
+
 #### Get climate variables: ####
 # coords_all must be in lat/long to work with climr. First, make it into a SpatVector: 
 coords_spat <- vect(coords_all, geom = c("x", "y"), crs = "EPSG:3005")
@@ -169,18 +171,20 @@ vars_simple <- c("PPT_sp", "PPT_sm", "PPT_at", "PPT_wt",
                  "Tmin_sp", "Tmin_sm", "Tmin_at", "Tmin_wt")
 
 
+# Expert set selected by Will or Courtney in previous iteration of CCISS: 
+vars_expert <- c("CMD_sm", "DDsub0_sp", "DD5_sp", "Eref_sm", "Eref_sp", 
+                "EXT", "MWMT", "NFFD_sm", "NFFD_sp", "PAS", "PAS_sp", 
+                "SHM", "Tave_sm", "Tave_sp", "Tmax_sm", "Tmax_sp", "Tmin", 
+                "Tmin_at", "Tmin_sm", "Tmin_sp", "Tmin_wt", "CMI")
 
+# Set selected through local feature selection. Every BGC is evaluated based on all BGCs that touch it. The final set of climate variables is the total list of each variable that was most important in each BGC. 
+vars_LFS <- c("")
 
-
-# QUESTION 10: These are the variables previously selected. Colin and Kiri mentioned the possibility of testing three subsets of climate variables: seasonal or monthly PPT/Tmax/Tmin, a pairwise selection, and an "ecologically relevant" subset. Is this the ecologically relevant subset? If not, what should be included in that instead? (Note: check AddVars() function to add more.)
-# Define a more complex set: 
-vars_more <- c("DD5", "DD_0_at", "DD_0_wt", "PPT05", "PPT06", "PPT07", "PPT08",
-               "PPT09", "CMD", "PPT_at", "PPT_wt", "CMD07", "SHM", "AHM", "NFFD", "PAS", "CMI")
-
-# QUESTION 10: Is there existing code for the "pairwise" variable selection? 01-23-25 - https://github.com/bcgov/Build_WNA_BGC_model/blob/development/R/LocalFeatureSelection.R. 
+# "Kitchen sink" scenario: 
+vars_all <- list_vars()
 
 # Pull data from climr:
-clim_vars <- downscale(
+clim_vars_simple <- downscale(
   xyz = coords_all,
   which_refmap = "refmap_climr",
   return_refperiod = TRUE, # Also return the 1961-1990 normals period.
@@ -188,8 +192,32 @@ clim_vars <- downscale(
   cache = TRUE)|>
   Cache()
 
+clim_vars_expert <- downscale(
+  xyz = coords_all,
+  which_refmap = "refmap_climr",
+  return_refperiod = TRUE, # Also return the 1961-1990 normals period.
+  vars = vars_expert,
+  cache = TRUE)|>
+  Cache()
+
+clim_vars_LFS <- downscale(
+  xyz = coords_all,
+  which_refmap = "refmap_climr",
+  return_refperiod = TRUE, # Also return the 1961-1990 normals period.
+  vars = vars_LFS,
+  cache = TRUE)|>
+  Cache()
+
+clim_vars_all <- downscale(
+  xyz = coords_all,
+  which_refmap = "refmap_climr",
+  return_refperiod = TRUE, # Also return the 1961-1990 normals period.
+  vars = vars_all,
+  cache = TRUE)|>
+  Cache()
+
 # Subset coords_all to include only rows where the id column matches an id in clim_vars: 
-# QUESTION 12: I'm not sure exactly why we need to do this - I guess in case there are some cases where climr didn't have data for all coordinates? Is that possible? 
+# QUESTION: I'm not sure exactly why we need to do this - I guess in case there are some cases where climr didn't have data for all coordinates? Is that possible? 
 coords_all <- coords_all[clim_vars[, .(id)], on = "id", nomatch = 0L] 
 
 # Remove duplicates:
@@ -232,7 +260,7 @@ trainData_balanced <- dataBalance_recipe |>
 # Check numbers of BGCs: 
 BGC_Nums <- trainData_balanced[,.(Num = .N), by = BGC]   
 
-# Train ranger random forest model: 
+#### Train ranger random forest model: ####
 trainData_balanced[, BGC := as.factor(BGC)]
 
 cols <- c("BGC", vars_simple)
