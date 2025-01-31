@@ -1,16 +1,42 @@
 library(leaflet)
 
-# # Add in the predictions for the model version with no gaps/holdouts. 
-# trainData_balanced_gaps$predictions_full <- predictions_full$predictions
-# 
-# # Deal with gaps/holdouts: 
-# trainData_balanced_gaps$predictions_Wgaps <- NA
-# trainData_balanced_gaps$predictions_Wgaps[trainData_balanced_gaps$gap == "yes"] <- as.character(predictions_Wgaps$predictions)
-trainData_balanced_gaps2 <- trainData_balanced_gaps
-
 # Define color palettes for trainData_balanced_gaps2# Define color palettes for the models
 subzones_colours_ref <- fread("C:/Users/dobrist/Government of BC/Future Forest Ecosystems Centre - CCISS - CCISS/CCISSv13_latest_tool_materials/WNAv13_Subzone_colours_2.csv") %>% 
   dplyr::select(!c(fid, MAP_LABEL, NSRNAME, ZONE)) 
+
+# Create template raster: 
+gap_DEM <- crop(elev, ext(gap_poly))
+gap_DEM <- mask(gap_DEM, gap_poly)
+plot(gap_DEM)
+
+# Convert predictions_full to a factor
+trainData_balanced_gaps[, predictions_full := as.factor(predictions_full)]
+
+# Assign predictions to raster cells
+gap_DEM[trainData_balanced_gaps[, id]] <- trainData_balanced_gaps[, predictions_full]
+
+# Plot the resulting raster
+plot(gap_DEM, main = "Predictions Full")
+
+
+
+# Convert trainData_balanced_gaps coordinates into a spatial object
+train_coords <- trainData_balanced_gaps[, .(lon, lat)]  # Extract lon/lat
+train_sp <- vect(train_coords, crs = crs(gap_DEM))  # Make it a spatial object with the same CRS as the raster
+
+# Get the corresponding cell indices in the raster based on the coordinates
+cell_indices <- cellFromXY(gap_DEM, train_sp)
+
+# Assign the values to the raster based on those indices
+values(gap_DEM)[cell_indices] <- as.character(trainData_balanced_gaps$predictions_full)
+
+# Check the result
+summary(values(gap_DEM))
+
+
+
+
+
 
 # Match up colors and zones: 
 trainData_balanced_gaps[, predictions_full := as.character(predictions_full)]
