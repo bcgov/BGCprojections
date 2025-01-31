@@ -2,6 +2,7 @@
 # Original script: Build_WNA_BGC_trainingset.Rmd by William H MacKenzie & Kiri Daust
 
 # Updated by Deb Obrist (January 2025)
+rm(list = ls())
 
 # Load packages: 
 library(tidyverse)
@@ -15,6 +16,7 @@ library(tidymodels) # for prep() function from recipes package.
 library(themis) # for step_downsample() function
 library(ranger) # For RF
 library(caret) # For confusionMatrix()
+library(beepr)
 
 # Source some functions: 
 source("R/utils.R")
@@ -29,9 +31,9 @@ options(reproducible.cachePath = "reproducible.cache/",
 bgcs <- st_read("C:/Users/dobrist/Government of BC/Future Forest Ecosystems Centre - CCISS - CCISS/ccissv13_workingfiles/BGC_modelling/WNA_BGC_v13_15Nov2024.gpkg")
 # bgcs <- st_read("//objectstore2.nrs.bcgov/ffec/CCISS_Working/WNA_BGC/WNA_BGC_v12_5Apr2022/WNA_BGC_v12_5Apr2022.gpkg")
 
-# TO DO: Find 30 m DEM. (Will says best to use 30 m DEM because climr vars depend on elevation). 
-# And the DEM:
-elev <- rast("C:/Users/dobrist/Government of BC/Future Forest Ecosystems Centre - CCISS - CCISS/ccissv13_workingfiles/BGC_modelling/WNA_DEM_4326_clipped.tif")
+# And the DEM 
+# TO DO: Update to 30 m when finalized:
+elev <- rast("C:/Users/dobrist/Government of BC/Future Forest Ecosystems Centre - CCISS - CCISS/BGCProjections/Proxy_ObjectStorage/DEM/DEM_Composite_WNA_800m/composite_WNA_dem.tif")
 # elev <- rast("//objectstore2.nrs.bcgov/ffec/DEM/DEM_Composite_WNA_800m/composite_WNA_dem.tif")
 
 # Reproject elev to Albers: 
@@ -102,15 +104,13 @@ nrow(bgc_att[is.na(bgc_att$BGC)]) # 70
 bgc_att <- bgc_att[!is.na(bgc_att$BGC), ]
 
 # Merge coords and BGC data from bgc_att: 
-coords <- merge(coords, bgc_att, by = c("id", "elev"))
+coords <- merge.data.table(coords, bgc_att, by = c("id", "elev"))
 
 # Crops the coordinates to the study area defined above: 
 # Note: coords_train will be identical to coords for now since I already cropped to the size of the smaller study area earlier but when I rerun with entire training area, it will be different. 
-coords_train <- subsetByExtent(coords2, studyarea_albers)
+coords_train <- subsetByExtent(coords, studyarea_albers)
 
 # Make rectangular gap extents within the bounding box of the study area. 5L is the default number of gaps to create. 
-
-# QUESTION 8: Is the idea that I will eventually make these gaps over the entire training area (i.e., BC, US, AB) to train and check a "final" model? 
 gapextents <- makeGapExtents(studyarea_albers, 5L)
 
 # Convert list of spatial extents into to polygons: 
@@ -132,17 +132,21 @@ for(i in 1:5){
   plot(gapextents[[i]], add=T)
 }
 
-points(x = coords_train$x, y = coords_train$y, col = "grey50", cex = 0.001) # All points
+# points(x = coords_train$x, y = coords_train$y, col = "grey50", cex = 0.001) # All points
 points(x = coords_gaps$x, y = coords_gaps$y, col = "black", cex = 0.001) # Just the gaps
 points(x = coords_trainWgaps$x, y = coords_trainWgaps$y, col = "white", cex = 0.001) # Everything but the gaps.
 
-# Recombine coords_gaps and coords_trainingWgaps but with an extra column for "gap = 0 or 1" for holdouts. 
-coords_gaps[, gap := "yes"]
-coords_trainWgaps[, gap:= "no"]
+# Recombine coords_gaps and coords_trainingWgaps but with an extra column for "gap = yes or no" for holdouts. 
+# coords_gaps[, gap := "yes"]
+# coords_trainWgaps[, gap:= "no"]
+set(coords_gaps, j = "gap", value = "yes")
+set(coords_trainWgaps, j = "gap", value = "no")
 
-coords_all <- rbind(coords_gaps, coords_trainWgaps)
+# coords_all <- rbind(coords_gaps, coords_trainWgaps)
+coords_all <- rbindlist(list(coords_gaps, coords_trainWgaps))
 
 #### Local feature selection: ####
+# Copy code on local feature selection here
 
 #### Get climate variables: ####
 # coords_all must be in lat/long to work with climr. First, make it into a SpatVector: 
@@ -158,120 +162,115 @@ coords_latlong <- as.data.table(geom(coords_spat_latlong))
 coords_all[, c("lon", "lat") := .(coords_latlong$x, coords_latlong$y)]
 
 # coords_all must have the following column names for climr: id, lon, lat, elev: 
-coords_all <- coords_all %>% 
-  #  rename(lon = x, lat = y) %>% 
-  select(id, lon, lat, elev, BGC, gap, x, y)
-
-# Define variables needed: 
-list_vars()
-
-# First, just seasonal PPT, Tmax, Tmin: 
-vars_simple <- c("PPT_sp", "PPT_sm", "PPT_at", "PPT_wt", 
-                 "Tmax_sp", "Tmax_sm", "Tmax_at", "Tmax_wt", 
-                 "Tmin_sp", "Tmin_sm", "Tmin_at", "Tmin_wt")
-
-
-# Expert set selected by Will or Courtney in previous iteration of CCISS: 
-vars_expert <- c("CMD_sm", "DDsub0_sp", "DD5_sp", "Eref_sm", "Eref_sp", 
-                "EXT", "MWMT", "NFFD_sm", "NFFD_sp", "PAS", "PAS_sp", 
-                "SHM", "Tave_sm", "Tave_sp", "Tmax_sm", "Tmax_sp", "Tmin", 
-                "Tmin_at", "Tmin_sm", "Tmin_sp", "Tmin_wt", "CMI")
-
-# Set selected through local feature selection. Every BGC is evaluated based on all BGCs that touch it. The final set of climate variables is the total list of each variable that was most important in each BGC. 
-vars_LFS <- c("")
-
-# "Kitchen sink" scenario: 
-vars_all <- list_vars()
+setcolorder(coords_all, c("id", "lon", "lat", "elev", "BGC", "gap", "x", "y"))
 
 # Pull data from climr:
-clim_vars_simple <- downscale(
+clim_vars <- downscale(
   xyz = coords_all,
   which_refmap = "refmap_climr",
   return_refperiod = TRUE, # Also return the 1961-1990 normals period.
-  vars = vars_simple,
+  vars = list_vars(),
   cache = TRUE)|>
   Cache()
 
-clim_vars_expert <- downscale(
-  xyz = coords_all,
-  which_refmap = "refmap_climr",
-  return_refperiod = TRUE, # Also return the 1961-1990 normals period.
-  vars = vars_expert,
-  cache = TRUE)|>
-  Cache()
+# Make an explicit copy of clim_vars to avoid modifying the original object by reference
+clim_vars_all <- copy(clim_vars)
 
-clim_vars_LFS <- downscale(
-  xyz = coords_all,
-  which_refmap = "refmap_climr",
-  return_refperiod = TRUE, # Also return the 1961-1990 normals period.
-  vars = vars_LFS,
-  cache = TRUE)|>
-  Cache()
-
-clim_vars_all <- downscale(
-  xyz = coords_all,
-  which_refmap = "refmap_climr",
-  return_refperiod = TRUE, # Also return the 1961-1990 normals period.
-  vars = vars_all,
-  cache = TRUE)|>
-  Cache()
+# Add the additional variables not available in climr. Use this for "kitchen-sink" scenario of all climate variables.
+ccissr::addVars(clim_vars_all)
 
 # Subset coords_all to include only rows where the id column matches an id in clim_vars: 
 # QUESTION: I'm not sure exactly why we need to do this - I guess in case there are some cases where climr didn't have data for all coordinates? Is that possible? 
-coords_all <- coords_all[clim_vars[, .(id)], on = "id", nomatch = 0L] 
+coords_all <- coords_all[clim_vars_all[, .(id)], on = "id", nomatch = 0L] 
 
 # Remove duplicates:
 coords_all  <- coords_all %>% 
   distinct()
 
-#### Assess climate variability within BGCs: ####
-# First, add long, lat, elevation, BGC, x, y, and gap back in: 
-trainData <- left_join(clim_vars, coords_all, relationship = "many-to-many") %>%
+# Bring coordinate data together with clim_vars_all data:
+trainData <- left_join(clim_vars_all, coords_all) %>%
   distinct()
 
-# QUESTION 13: Which BGCs should be included or not? Should they be removed based on number of points per BGC, or some metric from the climr data (e.g., CV for parameters within BGCs?) 
+#### Remove outliers and filter BGCs: ####
+# Set alpha for removal of outliers (2.5% = 3SD): 
+# TO DO: Determine how sensitive the results are to this alpha value. 
+trainData <- removeOutlier(as.data.frame(trainData), alpha = .025, vars = vars_all) |>
+  Cache()
 
+# To do: Decide how and if to filter BGCs. Start with not filtering them, document reasons why to or not to do it. 
+
+# Previous round of bad BGCs: 
 # Define bad BGCs and remove them: (These were selected in the RMarkdown script but I'm not sure why.) 
 # badbgcs <- c("BWBSvk", "ICHmc1a", "MHun", "SBSun", "ESSFun", "SWBvk","MSdm3","ESSFdc3", "IDFdxx_WY", "MSabS", "FGff", "JPWmk_WY" )#, "ESSFab""CWHws2", "CWHwm", "CWHms1" , 
 # trainData_bad <- trainData[BGC %in% badbgcs,]
 
-# Set alpha for removal of outliers (2.5% = 3SD): 
-# Question 14: Is this (inc. alpha of 0.025) standard practice? 
-trainData <- removeOutlier(as.data.frame(trainData), alpha = .025, vars = vars_simple) |>
-  Cache()
+# Remove very small sample BGC units (default cutoff = 30): SKIP FOR NOW. 
+# trainData <- rmLowSampleBGCs(trainData) |>
+#   Cache()
 
-# QUESTION 14: Ok here it looks like we're removing BGCs where the number of points is less than 30. So what made the "bad" ones bad above? 
+# # TO DO: Figure out if this is necessary/the best way to do it. It ensures that at most, larger BGCs have at most 90x as many rows as smallest BGC.
+# BGCs_pre_downsample <- trainData %>% 
+#   dplyr::group_by(BGC) %>% 
+#   dplyr::summarize (n = n()) %>% 
+#   dplyr::arrange(n)
+# 
+# # Subsample "oversampled" BGCs. This cuts them off at 90, if all BGCs are left in the sample, including those with only 1 point. 
+# dataBalance_recipe <- recipe(BGC ~ ., data =  trainData) |>
+#   step_downsample(BGC, under_ratio = 90) |>  ## subsamples "oversampled" BGCs
+#   prep()
 
-# Remove very small sample BGC units:
-trainData <- rmLowSampleBGCs(trainData) |>
-  Cache()
+# Extract the data.table of balanced points:
+# trainData_balanced <- dataBalance_recipe |>
+#   juice() |>
+#   as.data.table()
 
-# QUESTION 15: How exactly does this work? Just ensures that at most, larger BGCs have at most 90x as many rows as smallest BGC? And randomly selects rows of that to keep? Should we do a sensitivity analysis here? 
-# Subsample "oversampled" BGCs: 
-dataBalance_recipe <- recipe(BGC ~ ., data =  trainData) |>
-  step_downsample(BGC, under_ratio = 90) |>  ## subsamples "oversampled" BGCs
-  prep()
+# BGCs_post_downsample <- trainData_balanced %>% 
+#   dplyr::group_by(BGC) %>% 
+#   dplyr::summarize (n = n()) %>% 
+#   dplyr::arrange(n)
 
-## extract data.table
-trainData_balanced <- dataBalance_recipe |>
-  juice() |>
-  as.data.table()
+#### Assess climate variability within BGCs: ####
+# Figure out if more BGCs need to be removed due to high variability in combination with small sample sizes. 
 
-# Check numbers of BGCs: 
-BGC_Nums <- trainData_balanced[,.(Num = .N), by = BGC]   
+#### Set up climate variable combinations: ####
+# First, just seasonal PPT, Tmax, Tmin: 
+vars_simple <- c("PPT_sp", "PPT_sm", "PPT_at", "PPT_wt", 
+                 "Tmax_sp", "Tmax_sm", "Tmax_at", "Tmax_wt", 
+                 "Tmin_sp", "Tmin_sm", "Tmin_at", "Tmin_wt")
+
+# Set selected through local feature selection, with features selected objectively. Every BGC is evaluated based on all BGCs that touch it. The final set of climate variables is the total list of each variable that was most important in each BGC. 
+# TO DO: Set this up. 
+vars_LFS <- c("")
+
+# Expert set selected by Will MacKenzie in previous iteration of CCISS (also based on local feature selection): 
+vars_expert <- c("CMD_sm", "DDsub0_sp", "DD5_sp", "Eref_sm", "Eref_sp", 
+                 "EXT", "MWMT", "NFFD_sm", "NFFD_sp", "PAS", "PAS_sp", 
+                 "SHM", "Tave_sm", "Tave_sp", "Tmax_sm", "Tmax_sp", "Tmin", 
+                 "Tmin_at", "Tmin_sm", "Tmin_sp", "Tmin_wt", "CMI", "PPT_MJ", 
+                 "PPT_JAS", "CMD.total")
+
+# Kitchen sink scenario: All vars.  
+vars_all <- c(list_vars(), "PPT_MJ", "PPT_JAS", "PPT.dormant", "CMD.def", "CMDMax", "CMD.total", "DD_delayed")
+
+# Subset trainData to include the variables in different combinations of climr data: 
+trainData <- as.data.table(trainData)
+trainData[, BGC := as.factor(BGC)]
+
+trainData_simple <- trainData[, c("id", "PERIOD", "gap", "x", "y", "lat", "lon", "elev", "BGC", ..vars_simple)]
+trainData_expert <- trainData[, c("id", "PERIOD", "gap", "x", "y", "lat", "lon", "elev", "BGC", ..vars_expert)]
+trainData_all <- trainData[, c("id", "PERIOD", "gap", "x", "y", "lat", "lon", "elev", "BGC", ..vars_all)]
 
 #### Train ranger random forest model: ####
-trainData_balanced[, BGC := as.factor(BGC)]
+cols_simple <- c("BGC", vars_simple)
+cols_expert <- c("BGC", vars_expert)
+cols_all <- c("BGC", vars_all)
 
-cols <- c("BGC", vars_simple)
-
-# Run the RF model with the entire area: 
-BGCmodel_full <- ranger(
+# Train model with simple variables, on points from the entire study area: 
+BGCmodel_full_simple <- ranger(
   BGC ~ .,
-  data = trainData_balanced[, ..cols],
+  data = trainData_simple[, ..cols_simple],
   num.trees = 501,
   splitrule =  "extratrees",
-  # mtry = 2, # Allow for default.
   min.node.size = 2,
   importance = "permutation",
   write.forest = TRUE,
@@ -282,15 +281,14 @@ BGCmodel_full <- ranger(
   Cache()
 beepr::beep()
 
-# Run the model on area outside of the gaps: 
-trainData_balanced_Wgaps <- trainData_balanced[gap == 1]
+# Train model with simple variables, on points from area outside of the gaps: 
+trainData_simple_Wgaps <- trainData_simple[gap == "no"]
 
-BGCmodel_Wgaps <- ranger(
+BGCmodel_Wgaps_simple <- ranger(
   BGC ~ .,
-  data = trainData_balanced_Wgaps[, ..cols],
+  data = trainData_simple_Wgaps[, ..cols_simple],
   num.trees = 501,
   splitrule =  "extratrees",
- # mtry = 2, # Allow for default.
   min.node.size = 2,
   importance = "permutation",
   write.forest = TRUE,
@@ -300,23 +298,56 @@ BGCmodel_Wgaps <- ranger(
   Cache()
 beepr::beep()
 
-# QUESTION 17: How do we diagnose the models? What are we "happy" with? Also, what output specifically is required for CCISS? Accuracy/Precision/Recall/F1 score/AUC PR/ROC AUC/etc. 
 # Check the models: 
-conf_matrix_full <- caret::confusionMatrix(data = predictions(BGCmodel_full),
-                                           reference = trainData_balanced$BGC)
-conf_matrix_Wgaps <- caret::confusionMatrix(data = predictions(BGCmodel_Wgaps),
-                       reference = trainData_balanced_Wgaps$BGC)
+conf_matrix_full <- caret::confusionMatrix(data = predictions(BGCmodel_full_simple),
+                                           reference = trainData_simple$BGC)
+conf_matrix_Wgaps <- caret::confusionMatrix(data = predictions(BGCmodel_Wgaps_simple),
+                       reference = trainData_simple_Wgaps$BGC)
 
-print(BGCmodel_full) # OOB prediction error: 23.37%
-print(BGCmodel_Wgaps) # OOB prediction error: 23.13%
+print(BGCmodel_full_simple) # OOB prediction error: 28.98%
+print(BGCmodel_Wgaps_simple) # OOB prediction error: 29.13%
 
-# Generate predictions based on the coordinates in the gaps: 
-# Make testing data with gap data (gap = 0): 
-trainData_balanced_gaps <- trainData_balanced[gap == 0]
+#### Predictions: ####
+# Generate predictions based on the entire study area raster: 
+# First, reproject the raster to lat/long: 
+elev_latlong <- project(elev, "EPSG:4326")
 
-# Predictions based on full model and gap removed model: 
-predictions_full <- predict(BGCmodel_full, data = trainData_balanced_gaps)
-predictions_Wgaps <- predict(BGCmodel_Wgaps, data = trainData_balanced_gaps)
+# Reproject the polygon to match the raster CRS
+gap_poly_latlong <- terra::project(gap_poly, "EPSG:4326")
+
+# Crop and mask in the reprojected space
+elev_gaps <- crop(elev_latlong, ext(gap_poly_latlong))
+elev_gaps <- mask(elev_gaps, gap_poly_latlong)
+
+# Extract the transformed coordinates (longitude and latitude)
+elev_latlong <- as.data.frame(elev_latlong, cells = TRUE, xy = TRUE)
+elev_gaps <- as.data.frame(elev_gaps, cells = TRUE, xy = TRUE)
+
+# Add the transformed lon and lat columns back to coords_all: 
+# coords_all[, c("lon", "lat") := .(coords_latlong$x, coords_latlong$y)]
+
+# Convert the raster to a dataframe: 
+colnames(elev_latlong) <- c("id", "lon", "lat", "elev")
+colnames(elev_gaps) <- c("id", "lon", "lat", "elev")
+
+# Get climr data for these raster coordinates:
+clim_vars_preds <- downscale(
+  xyz = elev_latlong,
+  which_refmap = "refmap_climr",
+  return_refperiod = TRUE, # Also return the 1961-1990 normals period.
+  vars = list_vars(),
+  cache = TRUE)|>
+  Cache()
+
+# Predictions based on full model and gap removed models: 
+preds_full_simple <- predict(BGCmodel_full_simple, data = clim_vars_preds)
+preds_Wgaps_simple <- predict(BGCmodel_Wgaps_simple, data = clim_vars_preds)
+
+
+
+
+
+
 
 # Save into trainData_balanced_gaps testing dataframe:
 trainData_balanced_gaps$predictions_full <- as.character(predictions_full$predictions)
