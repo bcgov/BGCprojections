@@ -309,80 +309,124 @@ print(BGCmodel_Wgaps_simple) # OOB prediction error: 29.13%
 
 #### Predictions: ####
 # Generate predictions based on the entire study area raster: 
-# First, reproject the raster to lat/long: 
-elev_latlong <- project(elev, "EPSG:4326")
+# Convert elev to sf and join with bgcs
+elev_df <- as.data.frame(elev, cells = TRUE, xy = TRUE)
+colnames(elev_df) <- c("id", "x", "y", "elev")
 
-# Reproject the polygon to match the raster CRS
-gap_poly_latlong <- terra::project(gap_poly, "EPSG:4326")
+# Convert to sf object
+elev_sf <- st_as_sf(elev_df, coords = c("x", "y"), crs = 3005)
 
-# Crop and mask in the reprojected space
-elev_gaps <- crop(elev_latlong, ext(gap_poly_latlong))
-elev_gaps <- mask(elev_gaps, gap_poly_latlong)
+# Perform spatial join to attach BGC information
+bgc_all <- st_join(elev_sf, bgcs, left = TRUE)
 
-# Extract the transformed coordinates (longitude and latitude)
-elev_latlong <- as.data.frame(elev_latlong, cells = TRUE, xy = TRUE)
-elev_gaps <- as.data.frame(elev_gaps, cells = TRUE, xy = TRUE)
+# Remove duplicates based on 'id' and keep the first occurrence
+bgc_all_unique <- bgc_all %>%
+  distinct(id, .keep_all = TRUE)
 
-# Add the transformed lon and lat columns back to coords_all: 
-# coords_all[, c("lon", "lat") := .(coords_latlong$x, coords_latlong$y)]
+# Remove NAs: 
+bgc_all_unique <- bgc_all_unique[!is.na(bgc_all_unique$BGC), ]
 
-# Convert the raster to a dataframe: 
-colnames(elev_latlong) <- c("id", "lon", "lat", "elev")
-colnames(elev_gaps) <- c("id", "lon", "lat", "elev")
+# Transform to lat/lon (WGS84) after removing duplicates
+bgc_all_latlong <- st_transform(bgc_all_unique, crs = 4326)
+
+# Extract coordinates and convert to data.table
+bgc_coords <- st_coordinates(bgc_all_latlong)  # Extract lon/lat as a matrix
+bgc_all_latlong_dt <- data.table(bgc_all_latlong)  # Convert sf object to data.table
+
+# Add coordinates as new columns with proper names
+bgc_all_latlong_dt[, c("lon", "lat") := .(bgc_coords[, "X"], bgc_coords[, "Y"])]
+
+# Keep only the desired columns
+bgc_all_latlong_dt <- bgc_all_latlong_dt[, .(id, lon, lat, elev, BGC)]
 
 # Get climr data for these raster coordinates:
 clim_vars_preds <- downscale(
-  xyz = elev_latlong,
+  xyz = bgc_all_latlong_dt,
   which_refmap = "refmap_climr",
   return_refperiod = TRUE, # Also return the 1961-1990 normals period.
   vars = list_vars(),
   cache = TRUE)|>
   Cache()
 
+# Merge bgc_all_latlong_dt back in: 
+clim_vars_preds <- merge(clim_vars_preds, bgc_all_latlong_dt, by = "id")
+
 # Predictions based on full model and gap removed models: 
 preds_full_simple <- predict(BGCmodel_full_simple, data = clim_vars_preds)
 preds_Wgaps_simple <- predict(BGCmodel_Wgaps_simple, data = clim_vars_preds)
 
-
-
-
-
-
-
 # Save into trainData_balanced_gaps testing dataframe:
-trainData_balanced_gaps$predictions_full <- as.character(predictions_full$predictions)
-trainData_balanced_gaps$predictions_Wgaps <- as.character(predictions_Wgaps$predictions)
+clim_vars_preds$preds_full_simple <- as.character(preds_full_simple$predictions)
+clim_vars_preds$preds_Wgaps_simple <- as.character(preds_Wgaps_simple$predictions)
+
+# Ensure clim_vars_preds$BGC is a factor with unique levels
+clim_vars_preds$BGC <- as.factor(clim_vars_preds$BGC)
+
+# Align levels of both columns to avoid mismatches
+clim_vars_preds$preds_full_simple <- factor(
+  clim_vars_preds$preds_full_simple,
+  levels = levels(clim_vars_preds$BGC)  # Use levels from BGC
+)
+
+# Align levels of both preds_full_simple and preds_Wgaps_simple to avoid mismatches
+clim_vars_preds$preds_full_simple <- factor(
+  clim_vars_preds$preds_full_simple,
+  levels = levels(clim_vars_preds$BGC)  # Use levels from BGC (or preds_full_simple)
+)
+
+clim_vars_preds$preds_Wgaps_simple <- factor(
+  clim_vars_preds$preds_Wgaps_simple,
+  levels = levels(clim_vars_preds$preds_full_simple)  # Align with preds_full_simple
+)
 
 # Check how well each model performed at predicting gaps:  
-conf_matrix_testgaps_full <- caret::confusionMatrix(
-  data = factor(trainData_balanced_gaps$predictions_full, levels = levels(trainData_balanced_gaps$BGC)),
-  reference = factor(trainData_balanced_gaps$BGC, levels = levels(trainData_balanced_gaps$BGC))
+conf_matrix_preds_full_simple <- caret::confusionMatrix(
+  data = factor(clim_vars_preds$preds_full_simple, levels = levels(clim_vars_preds$BGC)),
+  reference = factor(clim_vars_preds$BGC, levels = levels(clim_vars_preds$BGC))
 )
 
-conf_matrix_testgaps_Wgaps <- caret::confusionMatrix(
-  data = factor(trainData_balanced_gaps$predictions_Wgaps, levels = levels(trainData_balanced_gaps$BGC)),
-  reference = factor(trainData_balanced_gaps$BGC, levels = levels(trainData_balanced_gaps$BGC))
+conf_matrix_preds_Wgaps_simple <- caret::confusionMatrix(
+  data = factor(clim_vars_preds$preds_Wgaps_simple, levels = levels(clim_vars_preds$BGC)),
+  reference = factor(clim_vars_preds$BGC, levels = levels(clim_vars_preds$BGC))
 )
+
 
 # Print accuracy of each on new data: 
-accuracy_full_on_gaps <- mean(trainData_balanced_gaps$predictions_full == trainData_balanced_gaps$BGC)
-print(paste("Accuracy on new data:", accuracy_full_on_gaps))
+accuracy_full_on_gaps <- mean(clim_vars_preds$preds_full_simple == clim_vars_preds$BGC)
+print(paste("Accuracy on new data:", accuracy_full_on_gaps)) # 0.77
 
-accuracy_Wgaps_on_gaps <- mean(trainData_balanced_gaps$predictions_Wgaps == trainData_balanced_gaps$BGC)
-print(paste("Accuracy on new data:", accuracy_Wgaps_on_gaps))
+accuracy_Wgaps_on_gaps <- mean(clim_vars_preds$preds_Wgaps_simple == clim_vars_preds$BGC)
+print(paste("Accuracy on new data:", accuracy_Wgaps_on_gaps)) # 0.68
 
 # Look at feature importance: 
-importance_scores_Wgaps <- BGCmodel_Wgaps$variable.importance
-importance_scores_Wgaps <- sort(importance_scores_Wgaps, decreasing = TRUE)
+importance_scores_full_simple <- BGCmodel_full_simple$variable.importance
+importance_scores_full_simple<- sort(importance_scores_full_simple, decreasing = TRUE)
+
+importance_scores_Wgaps_simple <- BGCmodel_Wgaps_simple$variable.importance
+importance_scores_Wgaps_simple<- sort(importance_scores_Wgaps_simple, decreasing = TRUE)
+
 
 # Create a data frame for plotting
-importance_df <- data.frame(
-  Feature = names(importance_scores_Wgaps),
-  Importance = importance_scores_Wgaps
+importance_scores_full_simple_df <- data.frame(
+  Feature = names(importance_scores_full_simple),
+  Importance = importance_scores_full_simple
 )
 
-# Plot
-ggplot(importance_df, aes(x = reorder(Feature, Importance), y = Importance)) +
+importance_scores_Wgaps_simple_df <- data.frame(
+  Feature = names(importance_scores_Wgaps_simple),
+  Importance = importance_scores_Wgaps_simple
+)
+
+# Plots
+ggplot(importance_scores_full_simple_df, aes(x = reorder(Feature, Importance), y = Importance)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  coord_flip() +
+  labs(title = "Feature Importance",
+       x = "Features",
+       y = "Importance") +
+  theme_minimal()
+
+ggplot(importance_scores_Wgaps_simple_df, aes(x = reorder(Feature, Importance), y = Importance)) +
   geom_bar(stat = "identity", fill = "steelblue") +
   coord_flip() +
   labs(title = "Feature Importance",
