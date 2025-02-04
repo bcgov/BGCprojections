@@ -18,7 +18,7 @@ library(ranger) # For RF
 library(caret) # For confusionMatrix()
 library(beepr)
 
-# Source some functions: 
+# Source functions: 
 source("R/utils.R")
 
 # Set default cache directories for the reproducible and climr packages (where intermediate results/downloaded data will be stored): 
@@ -38,6 +38,14 @@ elev <- rast("C:/Users/dobrist/Government of BC/Future Forest Ecosystems Centre 
 
 # Reproject elev to Albers: 
 elev <- project(elev, crs(bgcs))
+
+# Rasterize the polygons, assigning the values from a specific attribute column. This is to avoid reprojecting the BGC polygons: 
+bgcs_rast <- rasterize(bgcs, elev, field = "BGC")
+
+bgcs_rast_latlong <- project(bgcs_rast, "EPSG:4326")
+# Reproject into lat/long (see what terra does as default for categories, otherwise use nearest neighbour)
+
+
 
 # Define smaller test study area. These are the extents in lat/long but we want them in Albers instead.
 
@@ -348,16 +356,6 @@ clim_vars_preds <- downscale(
   cache = TRUE)|>
   Cache()
 
-# # Test with raster: 
-# new_elev <- copy(elev)
-# values(new_elev) <- NA
-# 
-# new_elev[clim_vars_preds$id] <- clim_vars_preds$Tmax
-# 
-# plot(new_elev)
-# 
-
-
 # Merge bgc_all_latlong_dt back in: 
 clim_vars_preds <- merge(clim_vars_preds, bgc_all_latlong_dt, by = "id")
 
@@ -388,6 +386,16 @@ clim_vars_preds$preds_Wgaps_simple <- factor(
   clim_vars_preds$preds_Wgaps_simple,
   levels = levels(clim_vars_preds$preds_full_simple)  # Align with preds_full_simple
 )
+
+# # Test with raster:
+new_elev <- copy(elev)
+values(new_elev) <- NA
+
+new_elev[clim_vars_preds$id] <- clim_vars_preds$preds_full_simple_num
+plot(new_elev)
+
+
+
 
 # Check how well each model performed at predicting gaps:  
 conf_matrix_preds_full_simple <- caret::confusionMatrix(

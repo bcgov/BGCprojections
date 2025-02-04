@@ -5,25 +5,18 @@ subzones_colours_ref <- fread("C:/Users/dobrist/Government of BC/Future Forest E
   dplyr::select(!c(fid, MAP_LABEL, NSRNAME, ZONE)) %>% 
   dplyr::mutate(BGC_num = as.numeric(as.factor(BGC)))
 
-# Reproject elev raster to WGS84 (EPSG:4326)
-preds_full_simple_DEM <- project(elev, "EPSG:4326")
-# elev_wgs <- project(elev, "EPSG:4326")
-
-# Convert the factor levels to numeric values
-clim_vars_preds$preds_full_simple_num <- as.numeric(clim_vars_preds$preds_full_simple)
+# Copy DEM: 
+preds_full_simple_DEM <- elev
 
 # Initialize the raster values with NA
 values(preds_full_simple_DEM) <- NA
 
-# Assign predictions to the corresponding raster cells by valid ID
+# Assign predictions to raster cells by ID
 preds_full_simple_DEM[clim_vars_preds$id] <- clim_vars_preds$preds_full_simple_num
 
 # Also merge with bgcs data for comparison. Reproject to lat/long as required by leaflet: 
 bgcs2 <- merge(bgcs, subzones_colours_ref, by = "BGC")
 bgcs2 <- st_transform(bgcs2, crs = 4326) 
-
-
-plot(preds_full_simple_DEM)
 
 # Add gaps: 
 # First, reproject to lat/long: 
@@ -41,37 +34,13 @@ color_pal_elev <- colorNumeric(
   na.color = "transparent"  
 )
 
-?colorNumeric
-# Check if the assignment worked (optional)
-head(values(preds_full_simple_DEM))
+plot(preds_full_simple_DEM)
 
-# Leaflet visualization
-leaflet() %>%
-  addTiles() %>%
-  addRasterImage(
-    preds_full_simple_DEM, 
-    colors = color_pal, 
- #   opacity = 0.5, 
-    group = "Preds: full, simple"
-  ) %>%
-  addLayersControl(
-    overlayGroups = c("Preds: full, simple"),
-    options = layersControlOptions(collapsed = FALSE)
-  )
+preds_full_simple_DEM <- project(preds_full_simple_DEM, "EPSG:4326")
 
 # Leaflet:
 leaflet(clim_vars_preds) %>%
-  addTiles() %>%
-  addPolygons(
-    data = bgcs2,            
-    fillColor = ~RGB,        
-    color = ~RGB,            
-    weight = 1,              
-    opacity = 1,             
-    fillOpacity = 0.5,       
-    popup = ~paste("Zone:", BGC),  
-    group = "BGC Zones"      
-  ) %>%
+  addTiles()  %>%
   addPolygons(
     data = gap_poly2,
     fillColor = "transparent",  
@@ -82,20 +51,24 @@ leaflet(clim_vars_preds) %>%
     popup = ~paste("Gap Polygon"),  
     group = "Gap Extents"
   ) %>% 
+  addPolygons(
+    data = bgcs2,            
+    fillColor = ~RGB,        
+    color = ~RGB,            
+    weight = 1,              
+    opacity = 1,             
+    fillOpacity = 1,       
+    popup = ~paste("Zone:", BGC),  
+    group = "BGC Zones"      
+  ) %>% 
   addRasterImage(
     preds_full_simple_DEM, 
-    # colors = color_pal, 
-    opacity = 0.5,    
+    colors = color_pal, 
+    opacity = 1,    
     group = "Preds: full, simple"
-  ) %>%
-  # addRasterImage(
-  #   elev_wgs,  # Raster object (must be in EPSG:4326)
-  #   colors = color_pal_elev,  # Apply the color palette
-  #   opacity = 0.7,  # Set opacity for the raster
-  #   group = "Elevation"
-  # ) %>% 
+  ) %>% 
   addLayersControl(
-    overlayGroups = c("BGC Zones", "Gap Extents", "Preds: full, simple", "Elevation"),  
+    overlayGroups = c("Gap Extents", "BGC Zones", "Preds: full, simple"),  
     options = layersControlOptions(collapsed = FALSE)  
   )
 
