@@ -7,41 +7,41 @@ subzones_colours_ref <- fread("C:/Users/dobrist/Government of BC/Future Forest E
 
 # Reproject elev raster to WGS84 (EPSG:4326)
 preds_full_simple_DEM <- project(elev, "EPSG:4326")
-elev_wgs <- project(elev, "EPSG:4326")
+# elev_wgs <- project(elev, "EPSG:4326")
 
 # Convert the factor levels to numeric values
 clim_vars_preds$preds_full_simple_num <- as.numeric(clim_vars_preds$preds_full_simple)
 
 # Initialize the raster values with NA
-new_raster_values <- rep(NA, ncell(preds_full_simple_DEM))
+values(preds_full_simple_DEM) <- NA
 
 # Assign predictions to the corresponding raster cells by valid ID
-new_raster_values[clim_vars_preds$id] <- clim_vars_preds$preds_full_simple_num
-
-# Update the raster with the new values
-values(preds_full_simple_DEM) <- new_raster_values
+preds_full_simple_DEM[clim_vars_preds$id] <- clim_vars_preds$preds_full_simple_num
 
 # Also merge with bgcs data for comparison. Reproject to lat/long as required by leaflet: 
 bgcs2 <- merge(bgcs, subzones_colours_ref, by = "BGC")
 bgcs2 <- st_transform(bgcs2, crs = 4326) 
+
+
+plot(preds_full_simple_DEM)
 
 # Add gaps: 
 # First, reproject to lat/long: 
 gap_poly2 <- project(gap_poly, "EPSG:4326")
 
 # Create a color factor mapping BGC to RGB colors
-color_pal <- colorFactor(
-  palette = subzones_colours_ref$RGB,  # The RGB values from your table
-  domain = clim_vars_preds$preds_full_simple_num   # The BGC categories from your table
+color_pal <- colorNumeric(
+  palette = subzones_colours_ref$RGB,  
+  domain = values(preds_full_simple_DEM)   
 )
 
 color_pal_elev <- colorNumeric(
-  palette = viridis::viridis(256),  # You can use any other palette like "viridis" or "inferno"
-  domain = values(elev_wgs),  # Numeric values from the raster
-  na.color = "transparent"  # Handle NA values
+  palette = viridis::viridis(256), 
+  domain = values(elev_wgs), 
+  na.color = "transparent"  
 )
 
-
+?colorNumeric
 # Check if the assignment worked (optional)
 head(values(preds_full_simple_DEM))
 
@@ -51,7 +51,7 @@ leaflet() %>%
   addRasterImage(
     preds_full_simple_DEM, 
     colors = color_pal, 
-    opacity = 0.5, 
+ #   opacity = 0.5, 
     group = "Preds: full, simple"
   ) %>%
   addLayersControl(
@@ -83,17 +83,17 @@ leaflet(clim_vars_preds) %>%
     group = "Gap Extents"
   ) %>% 
   addRasterImage(
-    preds_full_simple_DEM, # This is the reprojected raster
-    colors = color_pal,  # Apply the color palette
-    opacity = 0.5,     # Set the opacity of the raster layer
+    preds_full_simple_DEM, 
+    # colors = color_pal, 
+    opacity = 0.5,    
     group = "Preds: full, simple"
   ) %>%
-  addRasterImage(
-    elev_wgs,  # Raster object (must be in EPSG:4326)
-    colors = color_pal_elev,  # Apply the color palette
-    opacity = 0.7,  # Set opacity for the raster
-    group = "Elevation"
-  ) %>% 
+  # addRasterImage(
+  #   elev_wgs,  # Raster object (must be in EPSG:4326)
+  #   colors = color_pal_elev,  # Apply the color palette
+  #   opacity = 0.7,  # Set opacity for the raster
+  #   group = "Elevation"
+  # ) %>% 
   addLayersControl(
     overlayGroups = c("BGC Zones", "Gap Extents", "Preds: full, simple", "Elevation"),  
     options = layersControlOptions(collapsed = FALSE)  

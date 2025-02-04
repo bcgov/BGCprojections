@@ -348,6 +348,16 @@ clim_vars_preds <- downscale(
   cache = TRUE)|>
   Cache()
 
+# # Test with raster: 
+# new_elev <- copy(elev)
+# values(new_elev) <- NA
+# 
+# new_elev[clim_vars_preds$id] <- clim_vars_preds$Tmax
+# 
+# plot(new_elev)
+# 
+
+
 # Merge bgc_all_latlong_dt back in: 
 clim_vars_preds <- merge(clim_vars_preds, bgc_all_latlong_dt, by = "id")
 
