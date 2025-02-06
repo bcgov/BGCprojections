@@ -238,6 +238,9 @@ BGCs_pre_downsample <- trainData %>%
   dplyr::summarize (n = n()) %>%
   dplyr::arrange(n)
 
+# We do want to remove BAFA and "un" subzones (unvegetated and odd to predict): 
+trainData <- trainData[!grepl("un|BAFA", trainData$BGC), ]
+
 # Define bad BGCs and remove them: (These were selected in the RMarkdown script but I'm not sure why.) 
 # badbgcs <- c("BWBSvk", "ICHmc1a", "MHun", "SBSun", "ESSFun", "SWBvk","MSdm3","ESSFdc3", "IDFdxx_WY", "MSabS", "FGff", "JPWmk_WY" )#, "ESSFab""CWHws2", "CWHwm", "CWHms1" , 
 # trainData_bad <- trainData[BGC %in% badbgcs,]
@@ -272,6 +275,8 @@ BGCs_pre_downsample <- trainData %>%
 #### Train ranger random forest model: ####
 trainData <- as.data.table(trainData)
 trainData[, BGC := as.factor(BGC)]
+
+cols_simple <- c("BGC", vars_simple)
 
 # Train model with simple variables, on points from the entire study area: 
 BGCmodel_full_simple <- ranger(
@@ -310,7 +315,7 @@ beepr::beep()
 conf_matrix_full <- caret::confusionMatrix(data = predictions(BGCmodel_full_simple),
                                            reference = trainData_simple$BGC)
 conf_matrix_Wgaps <- caret::confusionMatrix(data = predictions(BGCmodel_Wgaps_simple),
-                       reference = trainData_simple_Wgaps$BGC)
+                       reference = trainData_Wgaps$BGC)
 
 print(BGCmodel_full_simple) # OOB prediction error: 22.98%
 print(BGCmodel_Wgaps_simple) # OOB prediction error: 23.11%
@@ -419,7 +424,7 @@ clim_vars_preds2 <- merge(clim_vars_preds, subzones_colours_ref, by.x = "preds_f
 template_raster <- bgcs_elev[[2]] 
 n_cells <- ncell(template_raster)
 preds_full_simple_rast <- rast(template_raster)
-values(new_layer) <- NA           
+values(preds_full_simple_rast) <- NA           
 
 # Map predictions to the template raster
 # Assume 'id' matches the cell numbers in the raster
