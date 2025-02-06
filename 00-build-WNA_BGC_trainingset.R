@@ -17,6 +17,7 @@ library(themis) # for step_downsample() function
 library(ranger) # For RF
 library(caret) # For confusionMatrix()
 library(beepr)
+library(leaflet)
 
 # Source functions: 
 source("R/utils.R")
@@ -25,36 +26,34 @@ source("R/utils.R")
 options(reproducible.cachePath = "reproducible.cache/",
         climr.cache.path = "climr.cache/")
 
+# Read in colours for reference of factors: 
+subzones_colours_ref <- fread("C:/Users/dobrist/Government of BC/Future Forest Ecosystems Centre - CCISS - CCISS/CCISSv13_latest_tool_materials/WNAv13_Subzone_colours_2.csv") %>% 
+  dplyr::select(!c(fid, MAP_LABEL, NSRNAME, ZONE)) %>% 
+  dplyr::mutate(BGC_num = as.numeric(as.factor(BGC)))
+
 #### Create training points: ####
 # Load in BGC polygons: 
-# TO DO: Update this with v13 once available. 
+# TO DO: 
+# Update this with v13 once available, source from object storage. 
 bgcs <- st_read("C:/Users/dobrist/Government of BC/Future Forest Ecosystems Centre - CCISS - CCISS/ccissv13_workingfiles/BGC_modelling/WNA_BGC_v13_15Nov2024.gpkg")
 # bgcs <- st_read("//objectstore2.nrs.bcgov/ffec/CCISS_Working/WNA_BGC/WNA_BGC_v12_5Apr2022/WNA_BGC_v12_5Apr2022.gpkg")
 
 # And the DEM 
-# TO DO: Update to 30 m when finalized:
+# TO DO: 
+# Update to 30 m when finalized, also source from object storage. 
 elev <- rast("C:/Users/dobrist/Government of BC/Future Forest Ecosystems Centre - CCISS - CCISS/BGCProjections/Proxy_ObjectStorage/DEM/DEM_Composite_WNA_800m/composite_WNA_dem.tif")
 # elev <- rast("//objectstore2.nrs.bcgov/ffec/DEM/DEM_Composite_WNA_800m/composite_WNA_dem.tif")
 
-# Reproject elev to Albers: 
+# First, reproject elev to Albers: 
 elev <- project(elev, crs(bgcs))
 
-# Rasterize the polygons, assigning the values from a specific attribute column. This is to avoid reprojecting the BGC polygons: 
-bgcs_rast <- rasterize(bgcs, elev, field = "BGC")
-
-bgcs_rast_latlong <- project(bgcs_rast, "EPSG:4326")
-# Reproject into lat/long (see what terra does as default for categories, otherwise use nearest neighbour)
-
-
-
 # Define smaller test study area. These are the extents in lat/long but we want them in Albers instead.
-
 # TO DO: Remove this later and run script on entire training area instead. 
 # trainingarea <- ext(c(-125, -112, 43, 55))
 studyarea <- ext(c(-123, -117, 49, 52.5))
 
 # Create a SpatRaster to represent the extents in lat/long
-dummy_raster <- rast(ext = studyarea, crs = "EPSG:4326", res = 0.1)  
+dummy_raster <- rast(ext = studyarea, crs = "EPSG:4326", res = 0.1)
 
 # Reproject the dummy raster to Albers (EPSG:3005)
 dummy_raster_albers <- project(dummy_raster, "EPSG:3005")
@@ -66,20 +65,24 @@ studyarea_albers <- ext(dummy_raster_albers)
 elev <- crop(elev, studyarea_albers)
 bgcs <- st_crop(bgcs, studyarea_albers)
 
-# TO DO: Find out if this is necessary. If so, what is a good land-only polygon to use? If not, what is the justification? (e.g., Colin mentioned that we want some overlap with ocean to make sure we hit islands etc)
-
+# TO DO: 
 # From example in climr documentation: "Since climr is meant to be used to downscale climate variables in land, we will “clip” (set values outside the polygon to NAs) the raster using a land-only polygonRemove areas with water: 
 
 # elev <- mask(elev, bgcs)
 
+# Find out if this is necessary. If so, what is a good land-only polygon to use? If not, what is the justification? (e.g., Colin mentioned that we want some overlap with ocean to make sure we hit islands etc)
 
-# TO DO: Decide/test whether it makes a difference if we randomly sample a set number of points (if so, how many) per BGC, or if we do a balanced sampling approach. If balanced, what kind of approach? 
+
+# TO DO: 
+# Decide/test whether it makes a difference if we randomly sample a set number of points (if so, how many) per BGC, or if we do a balanced sampling approach. If balanced, what kind of approach? 
 
 # This function makes a grid over the extent of bgcs, and fills it with a dummy variable (1L), converts to a spatial vector. It extracts elevation at the grid points using bilinear interpolation. 
-coords <- makePointCoords(bgcs, elev, gridSize = 2000) |>
+# TO DO: 
+# Test to see if changing grid size makes a difference? Running now with 1000 because when I use 2000 there are some BGCs with only 1 point. 
+coords <- makePointCoords(bgcs, elev, gridSize = 1000) |>
   Cache()
 
-# Need to rename lon and lat to x and y to work with subsetByExtent(), and because they are in Albers, not lat/long: 
+# Need to rename lon and lat to x and y to work with subsetByExtent(), and because they are in Albers, not lat/long:
 setnames(coords, old = c("lon", "lat"), new = c("x", "y"))
 
 # Extract BGC data from bgcs polygons and append as column to coords data:
@@ -88,33 +91,34 @@ points_sf <- st_as_sf(coords, coords = c("x", "y"), crs = 3005)
 bgc_att <- st_join(points_sf, bgcs)
 bgc_att <- data.table(st_drop_geometry(bgc_att))
 
-# bgc_att has 48108 unique IDs but 48109 rows. 
+# bgc_att has 192010 unique IDs but 192012 rows. 
 length(unique(bgc_att$id))
 nrow(bgc_att)
-bgc_att[duplicated(bgc_att$id), ] # ids 4979 is duplicated in v13
+bgc_att[duplicated(bgc_att$id), ] # ids 21321 and 34557 are duplicated in v13
 
-bgc_duplicates <- bgc_att[bgc_att$id %in% c(4979), ]
+bgc_duplicates <- bgc_att[bgc_att$id %in% c(21321, 34557), ]
 bgc_duplicates <- merge(bgc_duplicates, coords, by = c("id", "elev"))
 bgc_duplicates_sf <- st_as_sf(bgc_duplicates, coords = c("x", "y"), crs = 3005)
 
-# TO DO: Figure out what's going on with these duplicates and what to do about them. 
-checkarea <- ext(c(1583996 - 2500, 1583996 + 2500, 827812.8 - 2500, 827812.8 + 2500)) # xmin, xmax, ymin, ymax
+# TO DO: 
+# Document why I'm removing these duplicates (likely overlapping polygons across single grid cell) 
+checkarea <- ext(c(1593710  - 2500, 1593710 + 2500, 824076.6 - 2500, 824076.6 + 2500)) # xmin, xmax, ymin, ymax
 bgcs_check <- st_crop(bgcs, checkarea)
 plot(st_geometry(bgcs_check), col = as.factor(bgcs_check$BGC))
 plot(st_geometry(bgc_duplicates_sf), col = "black", pch = 16, add = TRUE)
 text(st_coordinates(bgc_duplicates_sf), labels = bgc_duplicates_sf$id, cex = 0.7, pos = 3, col = "black")
 
-# Remove this duplicate for now: 
+# Remove these duplicates:  
 bgc_att <- unique(bgc_att, by = "id")
 
 # Also remove rows where BGC is NA: 
-nrow(bgc_att[is.na(bgc_att$BGC)]) # 70
+nrow(bgc_att[is.na(bgc_att$BGC)]) # 294 rows with 1000 grid cells
 bgc_att <- bgc_att[!is.na(bgc_att$BGC), ]
 
 # Merge coords and BGC data from bgc_att: 
 coords <- merge.data.table(coords, bgc_att, by = c("id", "elev"))
 
-# Crops the coordinates to the study area defined above: 
+# Crop the coordinates to the study area defined above: 
 # Note: coords_train will be identical to coords for now since I already cropped to the size of the smaller study area earlier but when I rerun with entire training area, it will be different. 
 coords_train <- subsetByExtent(coords, studyarea_albers)
 
@@ -141,12 +145,10 @@ for(i in 1:5){
 }
 
 # points(x = coords_train$x, y = coords_train$y, col = "grey50", cex = 0.001) # All points
-points(x = coords_gaps$x, y = coords_gaps$y, col = "black", cex = 0.001) # Just the gaps
-points(x = coords_trainWgaps$x, y = coords_trainWgaps$y, col = "white", cex = 0.001) # Everything but the gaps.
+# points(x = coords_gaps$x, y = coords_gaps$y, col = "black", cex = 0.001) # Just the gaps
+# points(x = coords_trainWgaps$x, y = coords_trainWgaps$y, col = "white", cex = 0.001) # Everything but the gaps.
 
 # Recombine coords_gaps and coords_trainingWgaps but with an extra column for "gap = yes or no" for holdouts. 
-# coords_gaps[, gap := "yes"]
-# coords_trainWgaps[, gap:= "no"]
 set(coords_gaps, j = "gap", value = "yes")
 set(coords_trainWgaps, j = "gap", value = "no")
 
@@ -155,6 +157,26 @@ coords_all <- rbindlist(list(coords_gaps, coords_trainWgaps))
 
 #### Local feature selection: ####
 # Copy code on local feature selection here
+
+#### Set up climate variable combinations: ####
+# First, just seasonal PPT, Tmax, Tmin: 
+vars_simple <- c("PPT_sp", "PPT_sm", "PPT_at", "PPT_wt", 
+                 "Tmax_sp", "Tmax_sm", "Tmax_at", "Tmax_wt", 
+                 "Tmin_sp", "Tmin_sm", "Tmin_at", "Tmin_wt")
+
+# Set selected through local feature selection, with features selected objectively. Every BGC is evaluated based on all BGCs that touch it. The final set of climate variables is the total list of each variable that was most important in each BGC. 
+# TO DO: Set this up. 
+vars_LFS <- c("")
+
+# Expert set selected by Will MacKenzie in previous iteration of CCISS (also based on local feature selection): 
+vars_expert <- c("CMD_sm", "DDsub0_sp", "DD5_sp", "Eref_sm", "Eref_sp", 
+                 "EXT", "MWMT", "NFFD_sm", "NFFD_sp", "PAS", "PAS_sp", 
+                 "SHM", "Tave_sm", "Tave_sp", "Tmax_sm", "Tmax_sp", "Tmin", 
+                 "Tmin_at", "Tmin_sm", "Tmin_sp", "Tmin_wt", "CMI", "PPT_MJ", 
+                 "PPT_JAS", "CMD.total")
+
+# Kitchen sink scenario: All vars.  
+vars_all <- c(list_vars(), "PPT_MJ", "PPT_JAS", "PPT.dormant", "CMD.def", "CMDMax", "CMD.total", "DD_delayed")
 
 #### Get climate variables: ####
 # coords_all must be in lat/long to work with climr. First, make it into a SpatVector: 
@@ -201,27 +223,32 @@ trainData <- left_join(clim_vars_all, coords_all) %>%
 
 #### Remove outliers and filter BGCs: ####
 # Set alpha for removal of outliers (2.5% = 3SD): 
-# TO DO: Determine how sensitive the results are to this alpha value. 
+# TO DO: 
+# Determine how sensitive the results are to this alpha value. 
 trainData <- removeOutlier(as.data.frame(trainData), alpha = .025, vars = vars_all) |>
   Cache()
 
-# To do: Decide how and if to filter BGCs. Start with not filtering them, document reasons why to or not to do it. 
+# TO DO: 
+# Decide how and if to filter BGCs. Start with not filtering them, document reasons why to or not to do it. 
 
-# Previous round of bad BGCs: 
+# How many points per BGC? Smallest number is 6 with gridsize = 1000, 10 < 30, 15 < 50. Largest: 10056. 
+# (Smallest number is 1 with gridsize = 2000). 
+BGCs_pre_downsample <- trainData %>%
+  dplyr::group_by(BGC) %>%
+  dplyr::summarize (n = n()) %>%
+  dplyr::arrange(n)
+
 # Define bad BGCs and remove them: (These were selected in the RMarkdown script but I'm not sure why.) 
 # badbgcs <- c("BWBSvk", "ICHmc1a", "MHun", "SBSun", "ESSFun", "SWBvk","MSdm3","ESSFdc3", "IDFdxx_WY", "MSabS", "FGff", "JPWmk_WY" )#, "ESSFab""CWHws2", "CWHwm", "CWHms1" , 
 # trainData_bad <- trainData[BGC %in% badbgcs,]
 
-# Remove very small sample BGC units (default cutoff = 30): SKIP FOR NOW. 
+# Remove very small sample BGC units (default cutoff = 30): 
+# SKIP FOR NOW. Note - Courtney's most recent version removed BGCs with < 50.
 # trainData <- rmLowSampleBGCs(trainData) |>
 #   Cache()
 
-# # TO DO: Figure out if this is necessary/the best way to do it. It ensures that at most, larger BGCs have at most 90x as many rows as smallest BGC.
-# BGCs_pre_downsample <- trainData %>% 
-#   dplyr::group_by(BGC) %>% 
-#   dplyr::summarize (n = n()) %>% 
-#   dplyr::arrange(n)
-# 
+# TO DO: Figure out if this is necessary/the best way to do it. It ensures that at most, larger BGCs have at most 90x as many rows as smallest BGC but it sets a ceiling for number of points. 
+
 # # Subsample "oversampled" BGCs. This cuts them off at 90, if all BGCs are left in the sample, including those with only 1 point. 
 # dataBalance_recipe <- recipe(BGC ~ ., data =  trainData) |>
 #   step_downsample(BGC, under_ratio = 90) |>  ## subsamples "oversampled" BGCs
@@ -232,54 +259,27 @@ trainData <- removeOutlier(as.data.frame(trainData), alpha = .025, vars = vars_a
 #   juice() |>
 #   as.data.table()
 
+# See how many BGCs per with the downsample: 
 # BGCs_post_downsample <- trainData_balanced %>% 
 #   dplyr::group_by(BGC) %>% 
 #   dplyr::summarize (n = n()) %>% 
 #   dplyr::arrange(n)
 
 #### Assess climate variability within BGCs: ####
+# TO DO: 
 # Figure out if more BGCs need to be removed due to high variability in combination with small sample sizes. 
 
-#### Set up climate variable combinations: ####
-# First, just seasonal PPT, Tmax, Tmin: 
-vars_simple <- c("PPT_sp", "PPT_sm", "PPT_at", "PPT_wt", 
-                 "Tmax_sp", "Tmax_sm", "Tmax_at", "Tmax_wt", 
-                 "Tmin_sp", "Tmin_sm", "Tmin_at", "Tmin_wt")
-
-# Set selected through local feature selection, with features selected objectively. Every BGC is evaluated based on all BGCs that touch it. The final set of climate variables is the total list of each variable that was most important in each BGC. 
-# TO DO: Set this up. 
-vars_LFS <- c("")
-
-# Expert set selected by Will MacKenzie in previous iteration of CCISS (also based on local feature selection): 
-vars_expert <- c("CMD_sm", "DDsub0_sp", "DD5_sp", "Eref_sm", "Eref_sp", 
-                 "EXT", "MWMT", "NFFD_sm", "NFFD_sp", "PAS", "PAS_sp", 
-                 "SHM", "Tave_sm", "Tave_sp", "Tmax_sm", "Tmax_sp", "Tmin", 
-                 "Tmin_at", "Tmin_sm", "Tmin_sp", "Tmin_wt", "CMI", "PPT_MJ", 
-                 "PPT_JAS", "CMD.total")
-
-# Kitchen sink scenario: All vars.  
-vars_all <- c(list_vars(), "PPT_MJ", "PPT_JAS", "PPT.dormant", "CMD.def", "CMDMax", "CMD.total", "DD_delayed")
-
-# Subset trainData to include the variables in different combinations of climr data: 
+#### Train ranger random forest model: ####
 trainData <- as.data.table(trainData)
 trainData[, BGC := as.factor(BGC)]
-
-trainData_simple <- trainData[, c("id", "PERIOD", "gap", "x", "y", "lat", "lon", "elev", "BGC", ..vars_simple)]
-trainData_expert <- trainData[, c("id", "PERIOD", "gap", "x", "y", "lat", "lon", "elev", "BGC", ..vars_expert)]
-trainData_all <- trainData[, c("id", "PERIOD", "gap", "x", "y", "lat", "lon", "elev", "BGC", ..vars_all)]
-
-#### Train ranger random forest model: ####
-cols_simple <- c("BGC", vars_simple)
-cols_expert <- c("BGC", vars_expert)
-cols_all <- c("BGC", vars_all)
 
 # Train model with simple variables, on points from the entire study area: 
 BGCmodel_full_simple <- ranger(
   BGC ~ .,
-  data = trainData_simple[, ..cols_simple],
+  data = trainData[, ..cols_simple],
   num.trees = 501,
   splitrule =  "extratrees",
-  min.node.size = 2,
+  # min.node.size = 2, # Default is 1. Try with 1, see if model overfits. All other code used 2 so maybe that was why.
   importance = "permutation",
   write.forest = TRUE,
   classification = TRUE,
@@ -290,14 +290,14 @@ BGCmodel_full_simple <- ranger(
 beepr::beep()
 
 # Train model with simple variables, on points from area outside of the gaps: 
-trainData_simple_Wgaps <- trainData_simple[gap == "no"]
+trainData_Wgaps <- trainData[gap == "no"]
 
 BGCmodel_Wgaps_simple <- ranger(
   BGC ~ .,
-  data = trainData_simple_Wgaps[, ..cols_simple],
+  data = trainData_Wgaps[, ..cols_simple],
   num.trees = 501,
   splitrule =  "extratrees",
-  min.node.size = 2,
+  # min.node.size = 2, 
   importance = "permutation",
   write.forest = TRUE,
   classification = TRUE,
@@ -312,91 +312,48 @@ conf_matrix_full <- caret::confusionMatrix(data = predictions(BGCmodel_full_simp
 conf_matrix_Wgaps <- caret::confusionMatrix(data = predictions(BGCmodel_Wgaps_simple),
                        reference = trainData_simple_Wgaps$BGC)
 
-print(BGCmodel_full_simple) # OOB prediction error: 28.98%
-print(BGCmodel_Wgaps_simple) # OOB prediction error: 29.13%
+print(BGCmodel_full_simple) # OOB prediction error: 22.98%
+print(BGCmodel_Wgaps_simple) # OOB prediction error: 23.11%
 
 #### Predictions: ####
-# Generate predictions based on the entire study area raster: 
-# Convert elev to sf and join with bgcs
-elev_df <- as.data.frame(elev, cells = TRUE, xy = TRUE)
-colnames(elev_df) <- c("id", "x", "y", "elev")
+# Rasterize the BGC polygons, assigning the values from the BGC column. 
+bgcs_rast <- rasterize(bgcs, elev, field = "BGC")
 
-# Convert to sf object
-elev_sf <- st_as_sf(elev_df, coords = c("x", "y"), crs = 3005)
+# Align bgcs_rast and elev DEM to ensure resolution, extent, and CRS match: 
+bgcs_rast <- resample(bgcs_rast, elev, method = "near")
 
-# Perform spatial join to attach BGC information
-bgc_all <- st_join(elev_sf, bgcs, left = TRUE)
+# Merge bgcs_rast and elev into one multi-layer raster: 
+bgcs_elev <- c(elev, bgcs_rast)
+names(bgcs_elev) <- c("elev", "BGC")
 
-# Remove duplicates based on 'id' and keep the first occurrence
-bgc_all_unique <- bgc_all %>%
-  distinct(id, .keep_all = TRUE)
+# Reproject to lat/long to work with climr: 
+bgcs_elev <- project(bgcs_elev, "EPSG:4326", method = "near")
 
-# Remove NAs: 
-bgc_all_unique <- bgc_all_unique[!is.na(bgc_all_unique$BGC), ]
-
-# Transform to lat/lon (WGS84) after removing duplicates
-bgc_all_latlong <- st_transform(bgc_all_unique, crs = 4326)
-
-# Extract coordinates and convert to data.table
-bgc_coords <- st_coordinates(bgc_all_latlong)  # Extract lon/lat as a matrix
-bgc_all_latlong_dt <- data.table(bgc_all_latlong)  # Convert sf object to data.table
-
-# Add coordinates as new columns with proper names
-bgc_all_latlong_dt[, c("lon", "lat") := .(bgc_coords[, "X"], bgc_coords[, "Y"])]
-
-# Keep only the desired columns
-bgc_all_latlong_dt <- bgc_all_latlong_dt[, .(id, lon, lat, elev, BGC)]
+# Make into data table: 
+bgcs_elev_dt <- as.data.table(bgcs_elev, cells = TRUE, xy = TRUE) 
+colnames(bgcs_elev_dt) <- c("id", "lon", "lat", "elev", "BGC")
 
 # Get climr data for these raster coordinates:
 clim_vars_preds <- downscale(
-  xyz = bgc_all_latlong_dt,
+  xyz = bgcs_elev_dt,
   which_refmap = "refmap_climr",
   return_refperiod = TRUE, # Also return the 1961-1990 normals period.
   vars = list_vars(),
   cache = TRUE)|>
   Cache()
 
-# Merge bgc_all_latlong_dt back in: 
-clim_vars_preds <- merge(clim_vars_preds, bgc_all_latlong_dt, by = "id")
+# Merge important info (lat, lon, elev, and BGC) back in: 
+clim_vars_preds <- merge(clim_vars_preds, bgcs_elev_dt, by = "id")
 
 # Predictions based on full model and gap removed models: 
 preds_full_simple <- predict(BGCmodel_full_simple, data = clim_vars_preds)
 preds_Wgaps_simple <- predict(BGCmodel_Wgaps_simple, data = clim_vars_preds)
 
-# Save into trainData_balanced_gaps testing dataframe:
+# Save into clim_vars_preds dataframe:
 clim_vars_preds$preds_full_simple <- as.character(preds_full_simple$predictions)
 clim_vars_preds$preds_Wgaps_simple <- as.character(preds_Wgaps_simple$predictions)
 
-# Ensure clim_vars_preds$BGC is a factor with unique levels
-clim_vars_preds$BGC <- as.factor(clim_vars_preds$BGC)
-
-# Align levels of both columns to avoid mismatches
-clim_vars_preds$preds_full_simple <- factor(
-  clim_vars_preds$preds_full_simple,
-  levels = levels(clim_vars_preds$BGC)  # Use levels from BGC
-)
-
-# Align levels of both preds_full_simple and preds_Wgaps_simple to avoid mismatches
-clim_vars_preds$preds_full_simple <- factor(
-  clim_vars_preds$preds_full_simple,
-  levels = levels(clim_vars_preds$BGC)  # Use levels from BGC (or preds_full_simple)
-)
-
-clim_vars_preds$preds_Wgaps_simple <- factor(
-  clim_vars_preds$preds_Wgaps_simple,
-  levels = levels(clim_vars_preds$preds_full_simple)  # Align with preds_full_simple
-)
-
-# # Test with raster:
-new_elev <- copy(elev)
-values(new_elev) <- NA
-
-new_elev[clim_vars_preds$id] <- clim_vars_preds$preds_full_simple_num
-plot(new_elev)
-
-
-
-
+#### Check quality of predictions: ####
 # Check how well each model performed at predicting gaps:  
 conf_matrix_preds_full_simple <- caret::confusionMatrix(
   data = factor(clim_vars_preds$preds_full_simple, levels = levels(clim_vars_preds$BGC)),
@@ -407,7 +364,6 @@ conf_matrix_preds_Wgaps_simple <- caret::confusionMatrix(
   data = factor(clim_vars_preds$preds_Wgaps_simple, levels = levels(clim_vars_preds$BGC)),
   reference = factor(clim_vars_preds$BGC, levels = levels(clim_vars_preds$BGC))
 )
-
 
 # Print accuracy of each on new data: 
 accuracy_full_on_gaps <- mean(clim_vars_preds$preds_full_simple == clim_vars_preds$BGC)
@@ -422,7 +378,6 @@ importance_scores_full_simple<- sort(importance_scores_full_simple, decreasing =
 
 importance_scores_Wgaps_simple <- BGCmodel_Wgaps_simple$variable.importance
 importance_scores_Wgaps_simple<- sort(importance_scores_Wgaps_simple, decreasing = TRUE)
-
 
 # Create a data frame for plotting
 importance_scores_full_simple_df <- data.frame(
@@ -451,3 +406,77 @@ ggplot(importance_scores_Wgaps_simple_df, aes(x = reorder(Feature, Importance), 
        x = "Features",
        y = "Importance") +
   theme_minimal()
+
+#### Leaflet script: ####
+# TO DO: 
+# Try to simplify this code: 
+# Merge subzone colors refs to match BGCs with BGC factors properly:
+clim_vars_preds$preds_full_simple <- factor(clim_vars_preds$preds_full_simple, levels = subzones_colours_ref$BGC)
+clim_vars_preds2 <- merge(clim_vars_preds, subzones_colours_ref, by.x = "preds_full_simple", by.y = "BGC") %>% 
+  dplyr::rename(preds_full_simple_fct = BGC_num)
+
+# Rasterize the predictions: 
+template_raster <- bgcs_elev[[2]] 
+n_cells <- ncell(template_raster)
+preds_full_simple_rast <- rast(template_raster)
+values(new_layer) <- NA           
+
+# Map predictions to the template raster
+# Assume 'id' matches the cell numbers in the raster
+preds_full_simple_rast[clim_vars_preds2$id] <- clim_vars_preds2$preds_full_simple_fct
+names(preds_full_simple_rast) <- "preds_full_simple_fct"
+
+# Merge with bgcs data, reproject to lat/long as required by leaflet: 
+bgcs2 <- merge(bgcs, subzones_colours_ref, by = "BGC")
+bgcs2 <- st_transform(bgcs2, crs = 4326) # This is really fast... why can't I do this from the beginning? 
+
+# Add gaps: 
+# First, reproject to lat/long: 
+gap_poly2 <- project(gap_poly, "EPSG:4326")
+
+# Create a color factor mapping BGC to RGB colors
+color_pal <- colorNumeric(
+  palette = clim_vars_preds2$RGB,
+  domain = clim_vars_preds2$preds_full_simple_fct
+)
+
+# Rename values in the predictions raster to BGC_num so that they match up with the reference: 
+names(preds_full_simple_rast) <- "BGC_num"
+
+# Leaflet:
+leaflet() %>%
+  addTiles()  %>%
+  addPolygons(
+    data = gap_poly2,
+    fillColor = "transparent",
+    color = "black",
+    weight = 2,
+    opacity = 1,
+    fillOpacity = 0,
+    popup = ~paste("Gap Polygon"),
+    group = "Gap Extents"
+  ) %>%
+  addPolygons(
+    data = bgcs2,
+    fillColor = ~RGB,
+    color = ~RGB,
+    weight = 1,
+    opacity = 1,
+    fillOpacity = 1,
+    popup = ~paste("Zone:", BGC),
+    group = "BGC Zones"
+  ) %>%
+  addRasterImage(
+    preds_full_simple_rast,
+    colors = color_pal,
+    opacity = 1,
+    group = "Preds: full, simple"
+  ) %>%
+  addLayersControl(
+    overlayGroups = c("Gap Extents", 
+                      "BGC Zones", 
+                      "Preds: full, simple"),
+    options = layersControlOptions(collapsed = FALSE)
+  )
+
+beepr::beep()
