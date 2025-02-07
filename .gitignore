@@ -9,16 +9,14 @@
 reproducible.cache/
 climr.cache/
 
-## project R package library
-packages/
+BGCprojections-leaflet.R
+Build_WNA_BGC_trainingset.Rmd
+global.R
+trainingpts_w_clim_Final.Rdata
 
-## data
-spatialdata/
+tables/
+R/
+modules/
 
-#mods
-model_output/
+RF_models/
 
-## AWS info
-Example_S3Buckets1.R
-
-climData/
