@@ -14,9 +14,12 @@ tables/
 R/
 modules/
 RF_models/ 
+documents/
 
 # Other stuff
 BGCprojections-leaflet.R
 Build_WNA_BGC_trainingset.Rmd
 global.R
 trainingpts_w_clim_Final.Rdata
+
+deb-feedback-on-bgc-removals.png
