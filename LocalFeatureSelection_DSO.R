@@ -50,9 +50,9 @@ length(bgc_info$BGC) # 391
 # })
 # beepr::beep()
 
-# saveRDS(neighbours_ls,"WNA_BGC_NeighbourList.rds")
+# saveRDS(neighbours_ls,"data-generated/WNA_BGC_NeighbourList.rds")
 
-neighbours_ls <- readRDS("WNA_BGC_NeighbourList.rds")
+neighbours_ls <- readRDS("data-generated/WNA_BGC_NeighbourList.rds")
 
 # st_write(bgc_map, "WNA_BGCs_with_ID.gpkg", append = FALSE)
 
@@ -137,38 +137,43 @@ system.time({
 })
 beepr::beep()
 
-setdiff(vars1, vars2)
-setdiff(vars2, vars1)
-
-dat_all2 <- rbindlist(res_list)
-fwrite(dat_all2, "Focal_Variable_Importance_WNAv1.csv")
-var.count <- dat_all2[,.(Num = .N), by = .(Var)]
-setorder(test, -Num)
-toc()
-fwrite(var.count, "Count_of_Variables_v2.csv")
-#### Add type of variable by 3 categories and look by BGC
-### GS/NGS, Temp?Precip?interact, Extreme/Mean
-
-mean.error <- dat_all2 %>% select(Focal, OOB ) %>% distinct %>% mutate(mean.error = mean(OOB))
-mean.error2 <- mean.error %>% filter(!str_detect(Focal, "p$"))%>% filter(!str_detect(Focal, "w$"))
-require(ggplot2);require(stringr)
 
 
-ggplot(mean.error2, aes(x="Y" , y=OOB))+
-  geom_violin()+
-  stat_summary(fun.data = "mean_sdl",  geom="crossbar", width=0.05)
+# Code from Will: 
 
-var.type <- fread("Variable_Types.csv")
-dat_all2 <- fread("Focal_Variable_Importance_WNAv1.csv") %>% left_join(var.type)
-BGC_using_group <- dat_all2 %>% group_by(Focal, var.group, var.season) %>% count() %>% select(-n) %>%  ungroup() %>% group_by(var.group, var.season) %>% count()
-var.count <- dat_all2[,.(Num = .N), by = .(var.type)]
-setorder(test, -Num)
 
+# setdiff(vars1, vars2)
+# setdiff(vars2, vars1)
 # 
-# st_write(out, "Test_IDFdk3_Neighbours.gpkg")
-# st_write(pnts_all, "Test_pnts.gpkg")
+# dat_all2 <- rbindlist(res_list)
+# fwrite(dat_all2, "Focal_Variable_Importance_WNAv1.csv")
+# var.count <- dat_all2[,.(Num = .N), by = .(Var)]
+# setorder(test, -Num)
+# toc()
+# fwrite(var.count, "Count_of_Variables_v2.csv")
+# #### Add type of variable by 3 categories and look by BGC
+# ### GS/NGS, Temp?Precip?interact, Extreme/Mean
 # 
-# bgc_vect <- vect(bgc_map)
-# focal_vect <- vect(focal)
-# test <- terra::nearby(focal_vect,bgc_vect,distance = 0.1)
-# plot(bgc_vect[test[,2]])
+# mean.error <- dat_all2 %>% select(Focal, OOB ) %>% distinct %>% mutate(mean.error = mean(OOB))
+# mean.error2 <- mean.error %>% filter(!str_detect(Focal, "p$"))%>% filter(!str_detect(Focal, "w$"))
+# require(ggplot2);require(stringr)
+# 
+# 
+# ggplot(mean.error2, aes(x="Y" , y=OOB))+
+#   geom_violin()+
+#   stat_summary(fun.data = "mean_sdl",  geom="crossbar", width=0.05)
+# 
+# var.type <- fread("Variable_Types.csv")
+# dat_all2 <- fread("Focal_Variable_Importance_WNAv1.csv") %>% left_join(var.type)
+# BGC_using_group <- dat_all2 %>% group_by(Focal, var.group, var.season) %>% count() %>% select(-n) %>%  ungroup() %>% group_by(var.group, var.season) %>% count()
+# var.count <- dat_all2[,.(Num = .N), by = .(var.type)]
+# setorder(test, -Num)
+# 
+# # 
+# # st_write(out, "Test_IDFdk3_Neighbours.gpkg")
+# # st_write(pnts_all, "Test_pnts.gpkg")
+# # 
+# # bgc_vect <- vect(bgc_map)
+# # focal_vect <- vect(focal)
+# # test <- terra::nearby(focal_vect,bgc_vect,distance = 0.1)
+# # plot(bgc_vect[test[,2]])
