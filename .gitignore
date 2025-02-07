@@ -9,14 +9,14 @@
 reproducible.cache/
 climr.cache/
 
+# Folders:
+tables/
+R/
+modules/
+RF_models/ 
+
+# Other stuff
 BGCprojections-leaflet.R
 Build_WNA_BGC_trainingset.Rmd
 global.R
 trainingpts_w_clim_Final.Rdata
-
-tables/
-R/
-modules/
-
-RF_models/
-
