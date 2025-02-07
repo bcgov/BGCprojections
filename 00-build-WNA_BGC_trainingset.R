@@ -2,7 +2,6 @@
 # Original script: Build_WNA_BGC_trainingset.Rmd by William H MacKenzie & Kiri Daust
 
 # Updated by Deb Obrist (January 2025)
-rm(list = ls())
 
 # Load packages: 
 library(tidyverse)
@@ -20,7 +19,7 @@ library(beepr)
 library(leaflet)
 
 # Source functions: 
-source("R/utils.R")
+source("utils.R")
 
 # Set default cache directories for the reproducible and climr packages (where intermediate results/downloaded data will be stored): 
 options(reproducible.cachePath = "reproducible.cache/",
@@ -311,14 +310,89 @@ BGCmodel_Wgaps_simple <- ranger(
   Cache()
 beepr::beep()
 
+# Train model with expert selection of variables, on points from the entire study area: 
+BGCmodel_full_expert <- ranger(
+  BGC ~ .,
+  data = trainData[, ..cols_expert],
+  num.trees = 501,
+  splitrule =  "extratrees",
+  # min.node.size = 2, # Default is 1. Try with 1, see if model overfits. All other code used 2 so maybe that was why.
+  importance = "permutation",
+  write.forest = TRUE,
+  classification = TRUE,
+  probability = FALSE,
+  
+) |>
+  Cache()
+beepr::beep()
+
+BGCmodel_Wgaps_expert <- ranger(
+  BGC ~ .,
+  data = trainData_Wgaps[, ..cols_expert],
+  num.trees = 501,
+  splitrule =  "extratrees",
+  # min.node.size = 2, 
+  importance = "permutation",
+  write.forest = TRUE,
+  classification = TRUE,
+  probability = FALSE,
+) |>
+  Cache()
+beepr::beep()
+
+# Train model on all climate variables (kitchen sink scenario): 
+BGCmodel_full_all <- ranger(
+  BGC ~ .,
+  data = trainData[, ..cols_all],
+  num.trees = 501,
+  splitrule =  "extratrees",
+  # min.node.size = 2, # Default is 1. Try with 1, see if model overfits. All other code used 2 so maybe that was why.
+  importance = "permutation",
+  write.forest = TRUE,
+  classification = TRUE,
+  probability = FALSE,
+  
+) |>
+  Cache()
+beepr::beep()
+
+BGCmodel_Wgaps_all <- ranger(
+  BGC ~ .,
+  data = trainData_Wgaps[, ..cols_all],
+  num.trees = 501,
+  splitrule =  "extratrees",
+  # min.node.size = 2, 
+  importance = "permutation",
+  write.forest = TRUE,
+  classification = TRUE,
+  probability = FALSE,
+) |>
+  Cache()
+beepr::beep()
+
+
 # Check the models: 
-conf_matrix_full <- caret::confusionMatrix(data = predictions(BGCmodel_full_simple),
-                                           reference = trainData_simple$BGC)
-conf_matrix_Wgaps <- caret::confusionMatrix(data = predictions(BGCmodel_Wgaps_simple),
+conf_matrix_full_simple <- caret::confusionMatrix(data = predictions(BGCmodel_full_simple),
+                                           reference = trainData$BGC)
+conf_matrix_Wgaps_simple <- caret::confusionMatrix(data = predictions(BGCmodel_Wgaps_simple),
                        reference = trainData_Wgaps$BGC)
+
+conf_matrix_full_expert <- caret::confusionMatrix(data = predictions(BGCmodel_full_expert),
+                                           reference = trainData$BGC)
+conf_matrix_Wgaps_expert <- caret::confusionMatrix(data = predictions(BGCmodel_Wgaps_expert),
+                                            reference = trainData_Wgaps$BGC)
+
+conf_matrix_full_all <- caret::confusionMatrix(data = predictions(BGCmodel_full_all),
+                                           reference = trainData$BGC)
+conf_matrix_Wgaps_all <- caret::confusionMatrix(data = predictions(BGCmodel_Wgaps_all),
+                                            reference = trainData_Wgaps$BGC)
 
 print(BGCmodel_full_simple) # OOB prediction error: 22.98%
 print(BGCmodel_Wgaps_simple) # OOB prediction error: 23.11%
+print(BGCmodel_full_expert) # OOB prediction error: 22.98%
+print(BGCmodel_Wgaps_expert) # OOB prediction error: 23.11%
+print(BGCmodel_full_all) # OOB prediction error: 22.98%
+print(BGCmodel_Wgaps_all) # OOB prediction error: 23.11%
 
 #### Predictions: ####
 # Rasterize the BGC polygons, assigning the values from the BGC column. 
@@ -348,18 +422,25 @@ clim_vars_preds <- downscale(
   Cache()
 
 # Merge important info (lat, lon, elev, and BGC) back in: 
-clim_vars_preds <- merge(clim_vars_preds, bgcs_elev_dt, by = "id")
+clim_vars_preds <- merge(clim_vars_preds, bgcs_elev_dt, by = "id") 
 
 # Predictions based on full model and gap removed models: 
 preds_full_simple <- predict(BGCmodel_full_simple, data = clim_vars_preds)
 preds_Wgaps_simple <- predict(BGCmodel_Wgaps_simple, data = clim_vars_preds)
+preds_full_expert <- predict(BGCmodel_full_expert, data = clim_vars_preds)
+preds_Wgaps_expert <- predict(BGCmodel_Wgaps_expert, data = clim_vars_preds)
+preds_full_all <- predict(BGCmodel_full_all, data = clim_vars_preds)
+preds_Wgaps_all <- predict(BGCmodel_Wgaps_all, data = clim_vars_preds)
 
 # Save into clim_vars_preds dataframe:
 clim_vars_preds$preds_full_simple <- as.character(preds_full_simple$predictions)
 clim_vars_preds$preds_Wgaps_simple <- as.character(preds_Wgaps_simple$predictions)
+clim_vars_preds$preds_full_expert <- as.character(preds_full_expert$predictions)
+clim_vars_preds$preds_Wgaps_expert <- as.character(preds_Wgaps_expert$predictions)
+clim_vars_preds$preds_full_all <- as.character(preds_full_all$predictions)
+clim_vars_preds$preds_Wgaps_all <- as.character(preds_Wgaps_all$predictions)
 
 #### Check quality of predictions: ####
-# Check how well each model performed at predicting gaps:  
 conf_matrix_preds_full_simple <- caret::confusionMatrix(
   data = factor(clim_vars_preds$preds_full_simple, levels = levels(clim_vars_preds$BGC)),
   reference = factor(clim_vars_preds$BGC, levels = levels(clim_vars_preds$BGC))
@@ -370,12 +451,25 @@ conf_matrix_preds_Wgaps_simple <- caret::confusionMatrix(
   reference = factor(clim_vars_preds$BGC, levels = levels(clim_vars_preds$BGC))
 )
 
-# Print accuracy of each on new data: 
-accuracy_full_on_gaps <- mean(clim_vars_preds$preds_full_simple == clim_vars_preds$BGC)
-print(paste("Accuracy on new data:", accuracy_full_on_gaps)) # 0.77
+conf_matrix_preds_full_expert <- caret::confusionMatrix(
+  data = factor(clim_vars_preds$preds_full_expert, levels = levels(clim_vars_preds$BGC)),
+  reference = factor(clim_vars_preds$BGC, levels = levels(clim_vars_preds$BGC))
+)
 
-accuracy_Wgaps_on_gaps <- mean(clim_vars_preds$preds_Wgaps_simple == clim_vars_preds$BGC)
-print(paste("Accuracy on new data:", accuracy_Wgaps_on_gaps)) # 0.68
+conf_matrix_preds_Wgaps_expert <- caret::confusionMatrix(
+  data = factor(clim_vars_preds$preds_Wgaps_expert, levels = levels(clim_vars_preds$BGC)),
+  reference = factor(clim_vars_preds$BGC, levels = levels(clim_vars_preds$BGC))
+)
+
+conf_matrix_preds_full_all <- caret::confusionMatrix(
+  data = factor(clim_vars_preds$preds_full_all, levels = levels(clim_vars_preds$BGC)),
+  reference = factor(clim_vars_preds$BGC, levels = levels(clim_vars_preds$BGC))
+)
+
+conf_matrix_preds_Wgaps_all <- caret::confusionMatrix(
+  data = factor(clim_vars_preds$preds_Wgaps_all, levels = levels(clim_vars_preds$BGC)),
+  reference = factor(clim_vars_preds$BGC, levels = levels(clim_vars_preds$BGC))
+)
 
 # Look at feature importance: 
 importance_scores_full_simple <- BGCmodel_full_simple$variable.importance
@@ -417,19 +511,70 @@ ggplot(importance_scores_Wgaps_simple_df, aes(x = reorder(Feature, Importance), 
 # Try to simplify this code: 
 # Merge subzone colors refs to match BGCs with BGC factors properly:
 clim_vars_preds$preds_full_simple <- factor(clim_vars_preds$preds_full_simple, levels = subzones_colours_ref$BGC)
-clim_vars_preds2 <- merge(clim_vars_preds, subzones_colours_ref, by.x = "preds_full_simple", by.y = "BGC") %>% 
-  dplyr::rename(preds_full_simple_fct = BGC_num)
+clim_vars_preds <- merge(clim_vars_preds, subzones_colours_ref, by.x = "preds_full_simple", by.y = "BGC") %>% 
+  dplyr::rename(preds_full_simple_fct = BGC_num, RGB_full_simple = RGB)
+
+clim_vars_preds$preds_Wgaps_simple <- factor(clim_vars_preds$preds_Wgaps_simple, levels = subzones_colours_ref$BGC)
+clim_vars_preds <- merge(clim_vars_preds, subzones_colours_ref, by.x = "preds_Wgaps_simple", by.y = "BGC") %>% 
+  dplyr::rename(preds_Wgaps_simple_fct = BGC_num, RGB_Wgaps_simple = RGB)
+
+clim_vars_preds$preds_full_expert <- factor(clim_vars_preds$preds_full_expert, levels = subzones_colours_ref$BGC)
+clim_vars_preds <- merge(clim_vars_preds, subzones_colours_ref, by.x = "preds_full_expert", by.y = "BGC") %>% 
+  dplyr::rename(preds_full_expert_fct = BGC_num, RGB_full_expert = RGB)
+
+clim_vars_preds$preds_Wgaps_expert <- factor(clim_vars_preds$preds_Wgaps_expert, levels = subzones_colours_ref$BGC)
+clim_vars_preds <- merge(clim_vars_preds, subzones_colours_ref, by.x = "preds_Wgaps_expert", by.y = "BGC") %>% 
+  dplyr::rename(preds_Wgaps_expert_fct = BGC_num, RGB_Wgaps_expert = RGB)
+
+clim_vars_preds$preds_full_all <- factor(clim_vars_preds$preds_full_all, levels = subzones_colours_ref$BGC)
+clim_vars_preds <- merge(clim_vars_preds, subzones_colours_ref, by.x = "preds_full_all", by.y = "BGC") %>% 
+  dplyr::rename(preds_full_all_fct = BGC_num, RGB_full_all = RGB)
+
+clim_vars_preds$preds_Wgaps_all <- factor(clim_vars_preds$preds_Wgaps_all, levels = subzones_colours_ref$BGC)
+clim_vars_preds <- merge(clim_vars_preds, subzones_colours_ref, by.x = "preds_Wgaps_all", by.y = "BGC") %>% 
+  dplyr::rename(preds_Wgaps_all_fct = BGC_num, RGB_Wgaps_all = RGB)
 
 # Rasterize the predictions: 
 template_raster <- bgcs_elev[[2]] 
 n_cells <- ncell(template_raster)
+
 preds_full_simple_rast <- rast(template_raster)
-values(preds_full_simple_rast) <- NA           
+values(preds_full_simple_rast) <- NA    
+
+preds_Wgaps_simple_rast <- rast(template_raster)
+values(preds_Wgaps_simple_rast) <- NA         
+
+preds_full_expert_rast <- rast(template_raster)
+values(preds_full_expert_rast) <- NA    
+
+preds_Wgaps_expert_rast <- rast(template_raster)
+values(preds_Wgaps_expert_rast) <- NA         
+
+preds_full_all_rast <- rast(template_raster)
+values(preds_full_all_rast) <- NA    
+
+preds_Wgaps_all_rast <- rast(template_raster)
+values(preds_Wgaps_all_rast) <- NA         
 
 # Map predictions to the template raster
 # Assume 'id' matches the cell numbers in the raster
-preds_full_simple_rast[clim_vars_preds2$id] <- clim_vars_preds2$preds_full_simple_fct
+preds_full_simple_rast[preds$id] <- preds$preds_full_simple_fct
 names(preds_full_simple_rast) <- "preds_full_simple_fct"
+
+preds_Wgaps_simple_rast[preds$id] <- preds$preds_Wgaps_simple_fct
+names(preds_Wgaps_simple_rast) <- "preds_Wgaps_simple_fct"
+
+preds_full_expert_rast[preds$id] <- preds$preds_full_expert_fct
+names(preds_full_expert_rast) <- "preds_full_expert_fct"
+
+preds_Wgaps_expert_rast[preds$id] <- preds$preds_Wgaps_expert_fct
+names(preds_Wgaps_expert_rast) <- "preds_Wgaps_expert_fct"
+
+preds_full_all_rast[preds$id] <- preds$preds_full_all_fct
+names(preds_full_all_rast) <- "preds_full_all_fct"
+
+preds_Wgaps_all_rast[preds$id] <- preds$preds_Wgaps_all_fct
+names(preds_Wgaps_all_rast) <- "preds_Wgaps_all_fct"
 
 # Merge with bgcs data, reproject to lat/long as required by leaflet: 
 bgcs2 <- merge(bgcs, subzones_colours_ref, by = "BGC")
@@ -441,12 +586,17 @@ gap_poly2 <- project(gap_poly, "EPSG:4326")
 
 # Create a color factor mapping BGC to RGB colors
 color_pal <- colorNumeric(
-  palette = clim_vars_preds2$RGB,
-  domain = clim_vars_preds2$preds_full_simple_fct
+  palette = preds$RGB_full_simple,
+  domain = preds$preds_full_simple_fct
 )
 
-# Rename values in the predictions raster to BGC_num so that they match up with the reference: 
-names(preds_full_simple_rast) <- "BGC_num"
+color_pal2 <- colorNumeric(
+  palette = preds$RGB_Wgaps_simple,
+  domain = preds$preds_Wgaps_simple_fct
+)
+
+# # Rename values in the predictions raster to BGC_num so that they match up with the reference: 
+# names(preds_full_simple_rast) <- "BGC_num"
 
 # Leaflet:
 leaflet() %>%
@@ -461,27 +611,47 @@ leaflet() %>%
     popup = ~paste("Gap Polygon"),
     group = "Gap Extents"
   ) %>%
-  addPolygons(
-    data = bgcs2,
-    fillColor = ~RGB,
-    color = ~RGB,
-    weight = 1,
-    opacity = 1,
-    fillOpacity = 1,
-    popup = ~paste("Zone:", BGC),
-    group = "BGC Zones"
-  ) %>%
+  # addPolygons(
+  #   data = bgcs2,
+  #   fillColor = ~RGB,
+  #   color = ~RGB,
+  #   weight = 1,
+  #   opacity = 1,
+  #   fillOpacity = 1,
+  #   popup = ~paste("Zone:", BGC),
+  #   group = "BGC Zones"
+  # ) %>%
   addRasterImage(
     preds_full_simple_rast,
     colors = color_pal,
     opacity = 1,
     group = "Preds: full, simple"
   ) %>%
+  addRasterImage(
+    preds_Wgaps_simple_rast,
+    colors = color_pal2,
+    opacity = 1,
+    group = "Preds: Wgaps, simple"
+  ) %>%
+  addRasterImage(
+    preds_full_expert_rast,
+    colors = color_pal2,
+    opacity = 1,
+    group = "Preds: full, expert"
+  ) %>%
+  addRasterImage(
+    preds_Wgaps_expert_rast,
+    colors = color_pal2,
+    opacity = 1,
+    group = "Preds: Wgaps, expert"
+  ) %>%
   addLayersControl(
     overlayGroups = c("Gap Extents", 
                       "BGC Zones", 
-                      "Preds: full, simple"),
+                      "Preds: full, simple", 
+                      "Preds: Wgaps, simple",
+                      "Preds: full, expert",
+                      "Preds: Wgaps, expert"),
     options = layersControlOptions(collapsed = FALSE)
   )
 
-beepr::beep()
