@@ -276,6 +276,8 @@ trainData <- as.data.table(trainData)
 trainData[, BGC := as.factor(BGC)]
 
 cols_simple <- c("BGC", vars_simple)
+cols_expert <- c("BGC", vars_expert)
+cols_all <- c("BGC", vars_all)
 
 # Train model with simple variables, on points from the entire study area: 
 BGCmodel_full_simple <- ranger(
@@ -387,8 +389,8 @@ conf_matrix_full_all <- caret::confusionMatrix(data = predictions(BGCmodel_full_
 conf_matrix_Wgaps_all <- caret::confusionMatrix(data = predictions(BGCmodel_Wgaps_all),
                                             reference = trainData_Wgaps$BGC)
 
-print(BGCmodel_full_simple) # OOB prediction error: 22.98%
-print(BGCmodel_Wgaps_simple) # OOB prediction error: 23.11%
+print(BGCmodel_full_simple) # OOB prediction error: 21.87%
+print(BGCmodel_Wgaps_simple) # OOB prediction error: 21.91%
 print(BGCmodel_full_expert) # OOB prediction error: 22.98%
 print(BGCmodel_Wgaps_expert) # OOB prediction error: 23.11%
 print(BGCmodel_full_all) # OOB prediction error: 22.98%
@@ -413,13 +415,16 @@ bgcs_elev_dt <- as.data.table(bgcs_elev, cells = TRUE, xy = TRUE)
 colnames(bgcs_elev_dt) <- c("id", "lon", "lat", "elev", "BGC")
 
 # Get climr data for these raster coordinates:
-clim_vars_preds <- downscale(
+clim_vars_preds2 <- downscale(
   xyz = bgcs_elev_dt,
   which_refmap = "refmap_climr",
   return_refperiod = TRUE, # Also return the 1961-1990 normals period.
   vars = list_vars(),
   cache = TRUE)|>
   Cache()
+
+clim_vars_preds <- copy(clim_vars_preds2)
+ccissr::addVars(clim_vars_preds)
 
 # Merge important info (lat, lon, elev, and BGC) back in: 
 clim_vars_preds <- merge(clim_vars_preds, bgcs_elev_dt, by = "id") 
@@ -471,40 +476,40 @@ conf_matrix_preds_Wgaps_all <- caret::confusionMatrix(
   reference = factor(clim_vars_preds$BGC, levels = levels(clim_vars_preds$BGC))
 )
 
-# Look at feature importance: 
-importance_scores_full_simple <- BGCmodel_full_simple$variable.importance
-importance_scores_full_simple<- sort(importance_scores_full_simple, decreasing = TRUE)
-
-importance_scores_Wgaps_simple <- BGCmodel_Wgaps_simple$variable.importance
-importance_scores_Wgaps_simple<- sort(importance_scores_Wgaps_simple, decreasing = TRUE)
-
-# Create a data frame for plotting
-importance_scores_full_simple_df <- data.frame(
-  Feature = names(importance_scores_full_simple),
-  Importance = importance_scores_full_simple
-)
-
-importance_scores_Wgaps_simple_df <- data.frame(
-  Feature = names(importance_scores_Wgaps_simple),
-  Importance = importance_scores_Wgaps_simple
-)
-
-# Plots
-ggplot(importance_scores_full_simple_df, aes(x = reorder(Feature, Importance), y = Importance)) +
-  geom_bar(stat = "identity", fill = "steelblue") +
-  coord_flip() +
-  labs(title = "Feature Importance",
-       x = "Features",
-       y = "Importance") +
-  theme_minimal()
-
-ggplot(importance_scores_Wgaps_simple_df, aes(x = reorder(Feature, Importance), y = Importance)) +
-  geom_bar(stat = "identity", fill = "steelblue") +
-  coord_flip() +
-  labs(title = "Feature Importance",
-       x = "Features",
-       y = "Importance") +
-  theme_minimal()
+#### Look at feature importance: ####
+# importance_scores_full_simple <- BGCmodel_full_simple$variable.importance
+# importance_scores_full_simple<- sort(importance_scores_full_simple, decreasing = TRUE)
+# 
+# importance_scores_Wgaps_simple <- BGCmodel_Wgaps_simple$variable.importance
+# importance_scores_Wgaps_simple<- sort(importance_scores_Wgaps_simple, decreasing = TRUE)
+# 
+# # Create a data frame for plotting
+# importance_scores_full_simple_df <- data.frame(
+#   Feature = names(importance_scores_full_simple),
+#   Importance = importance_scores_full_simple
+# )
+# 
+# importance_scores_Wgaps_simple_df <- data.frame(
+#   Feature = names(importance_scores_Wgaps_simple),
+#   Importance = importance_scores_Wgaps_simple
+# )
+# 
+# # Plots
+# ggplot(importance_scores_full_simple_df, aes(x = reorder(Feature, Importance), y = Importance)) +
+#   geom_bar(stat = "identity", fill = "steelblue") +
+#   coord_flip() +
+#   labs(title = "Feature Importance",
+#        x = "Features",
+#        y = "Importance") +
+#   theme_minimal()
+# 
+# ggplot(importance_scores_Wgaps_simple_df, aes(x = reorder(Feature, Importance), y = Importance)) +
+#   geom_bar(stat = "identity", fill = "steelblue") +
+#   coord_flip() +
+#   labs(title = "Feature Importance",
+#        x = "Features",
+#        y = "Importance") +
+#   theme_minimal()
 
 #### Leaflet script: ####
 # TO DO: 
@@ -558,22 +563,22 @@ values(preds_Wgaps_all_rast) <- NA
 
 # Map predictions to the template raster
 # Assume 'id' matches the cell numbers in the raster
-preds_full_simple_rast[preds$id] <- preds$preds_full_simple_fct
+preds_full_simple_rast[clim_vars_preds$id] <- clim_vars_preds$preds_full_simple_fct
 names(preds_full_simple_rast) <- "preds_full_simple_fct"
 
-preds_Wgaps_simple_rast[preds$id] <- preds$preds_Wgaps_simple_fct
+preds_Wgaps_simple_rast[clim_vars_preds$id] <- clim_vars_preds$preds_Wgaps_simple_fct
 names(preds_Wgaps_simple_rast) <- "preds_Wgaps_simple_fct"
 
-preds_full_expert_rast[preds$id] <- preds$preds_full_expert_fct
+preds_full_expert_rast[clim_vars_preds$id] <- clim_vars_preds$preds_full_expert_fct
 names(preds_full_expert_rast) <- "preds_full_expert_fct"
 
-preds_Wgaps_expert_rast[preds$id] <- preds$preds_Wgaps_expert_fct
+preds_Wgaps_expert_rast[clim_vars_preds$id] <- clim_vars_preds$preds_Wgaps_expert_fct
 names(preds_Wgaps_expert_rast) <- "preds_Wgaps_expert_fct"
 
-preds_full_all_rast[preds$id] <- preds$preds_full_all_fct
+preds_full_all_rast[clim_vars_preds$id] <- clim_vars_preds$preds_full_all_fct
 names(preds_full_all_rast) <- "preds_full_all_fct"
 
-preds_Wgaps_all_rast[preds$id] <- preds$preds_Wgaps_all_fct
+preds_Wgaps_all_rast[clim_vars_preds$id] <- clim_vars_preds$preds_Wgaps_all_fct
 names(preds_Wgaps_all_rast) <- "preds_Wgaps_all_fct"
 
 # Merge with bgcs data, reproject to lat/long as required by leaflet: 
@@ -586,13 +591,8 @@ gap_poly2 <- project(gap_poly, "EPSG:4326")
 
 # Create a color factor mapping BGC to RGB colors
 color_pal <- colorNumeric(
-  palette = preds$RGB_full_simple,
-  domain = preds$preds_full_simple_fct
-)
-
-color_pal2 <- colorNumeric(
-  palette = preds$RGB_Wgaps_simple,
-  domain = preds$preds_Wgaps_simple_fct
+  palette = clim_vars_preds$RGB_full_simple,
+  domain = clim_vars_preds$preds_full_simple_fct
 )
 
 # # Rename values in the predictions raster to BGC_num so that they match up with the reference: 
@@ -629,21 +629,21 @@ leaflet() %>%
   ) %>%
   addRasterImage(
     preds_Wgaps_simple_rast,
-    colors = color_pal2,
+    colors = color_pal,
     opacity = 1,
     group = "Preds: Wgaps, simple"
-  ) %>%
-  addRasterImage(
-    preds_full_expert_rast,
-    colors = color_pal2,
-    opacity = 1,
-    group = "Preds: full, expert"
-  ) %>%
-  addRasterImage(
-    preds_Wgaps_expert_rast,
-    colors = color_pal2,
-    opacity = 1,
-    group = "Preds: Wgaps, expert"
+  # ) %>%
+  # addRasterImage(
+  #   preds_full_expert_rast,
+  #   colors = color_pal2,
+  #   opacity = 1,
+  #   group = "Preds: full, expert"
+  # ) %>%
+  # addRasterImage(
+  #   preds_Wgaps_expert_rast,
+  #   colors = color_pal2,
+  #   opacity = 1,
+  #   group = "Preds: Wgaps, expert"
   ) %>%
   addLayersControl(
     overlayGroups = c("Gap Extents", 
@@ -655,3 +655,4 @@ leaflet() %>%
     options = layersControlOptions(collapsed = FALSE)
   )
 
+beepr::beep()
