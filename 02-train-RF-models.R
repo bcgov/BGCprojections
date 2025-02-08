@@ -77,22 +77,22 @@ saveRDS(BGCmodel_Wgaps_simple, "RF_models/BGCmodel_Wgaps_simple_V1.rds")
 BGCmodel_Wgaps_simple <- readRDS("RF_models/BGCmodel_Wgaps_simple_V1.rds")
 
 # Train model with expert selection of variables, on points from the entire study area: 
-BGCmodel_full_expert <- ranger(
-  BGC ~ .,
-  data = trainData[, ..cols_expert],
-  num.trees = 501,
-  splitrule =  "extratrees",
-  # min.node.size = 2,
-  importance = "permutation",
-  write.forest = TRUE,
-  classification = TRUE,
-  probability = FALSE,
-
-) |>
-  Cache()
-
-# Note: V1 = no BGCs removed.
-saveRDS(BGCmodel_full_expert, "RF_models/BGCmodel_full_expert_V1.rds")
+# BGCmodel_full_expert <- ranger(
+#   BGC ~ .,
+#   data = trainData[, ..cols_expert],
+#   num.trees = 501,
+#   splitrule =  "extratrees",
+#   # min.node.size = 2,
+#   importance = "permutation",
+#   write.forest = TRUE,
+#   classification = TRUE,
+#   probability = FALSE,
+# 
+# ) |>
+#   Cache()
+# 
+# # Note: V1 = no BGCs removed.
+# saveRDS(BGCmodel_full_expert, "RF_models/BGCmodel_full_expert_V1.rds")
 BGCmodel_full_expert <- readRDS("RF_models/BGCmodel_full_simple_V1.rds")
 
 BGCmodel_Wgaps_expert <- ranger(

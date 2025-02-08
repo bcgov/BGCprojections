@@ -21,6 +21,7 @@ BGCmodel_Wgaps_expert <- readRDS("RF_models/BGCmodel_Wgaps_expert_V1.rds")
 BGCmodel_full_all <- readRDS("RF_models/BGCmodel_full_all_V1.rds")
 BGCmodel_Wgaps_all <- readRDS("RF_models/BGCmodel_Wgaps_all_V1.rds")
 
+
 # Read in and prepare DEM and BGCs again: 
 # Load in BGC polygons: 
 # TO DO: 
@@ -138,7 +139,7 @@ conf_matrix_preds_Wgaps_all <- caret::confusionMatrix(
 # This is where I was trying to figure out if there is an obvious "minimum" number of sample points required to make "good" predictions, which I was evaluating based on sensitivity. Not sure if this is the best metric. Also not sure what a "good" sensitivity is. 
 
 # How many points per BGC? 
-BGCs_pre_downsample <- trainData %>%
+BGCs_pre_downsample <- clim_vars_preds %>%
   dplyr::group_by(BGC) %>%
   dplyr::summarize (n = n()) %>%
   dplyr::arrange(n)

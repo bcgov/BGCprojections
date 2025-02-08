@@ -12,8 +12,10 @@ library(ranger) # For RF
 library(caret) # For confusionMatrix()
 library(leaflet)
 
-# TO DO: 
 # Read in predictions data: 
+# NOTE - this is quite large so I'm not going to push to Github but it can be made locally by running the 03 script. 
+clim_vars_preds <- read.csv("data-generated/clim_vars_preds.csv")
+
 # Maybe make a separate 00 script with leaflet set up so that I can just run leaflet here. 
 # Also try to simplify this code. The set up is in part copied and pasted from other scripts, especially the part setting up the raster template because I wasn't sure if it was a good idea to save copies of those large spatial objects...
 
