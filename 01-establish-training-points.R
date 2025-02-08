@@ -8,10 +8,6 @@ library(sf)
 library(foreach) # for outlier removal function
 library(tidymodels) # for prep() function from recipes package. 
 library(themis) # for step_downsample() function
-library(ranger) # For RF
-library(caret) # For confusionMatrix()
-library(beepr)
-library(leaflet)
 
 # Source functions: 
 source("utils.R")
@@ -20,10 +16,6 @@ source("utils.R")
 options(reproducible.cachePath = "reproducible.cache/",
         climr.cache.path = "climr.cache/")
 
-# Read in colours for reference of factors: 
-subzones_colours_ref <- fread("C:/Users/dobrist/Government of BC/Future Forest Ecosystems Centre - CCISS - CCISS/CCISSv13_latest_tool_materials/WNAv13_Subzone_colours_2.csv") %>% 
-  dplyr::select(!c(fid, MAP_LABEL, NSRNAME, ZONE)) %>% 
-  dplyr::mutate(BGC_num = as.numeric(as.factor(BGC)))
 
 #### Create training points: ####
 # Load in BGC polygons: 
@@ -150,7 +142,8 @@ set(coords_trainWgaps, j = "gap", value = "no")
 coords_all <- rbindlist(list(coords_gaps, coords_trainWgaps))
 
 #### Local feature selection: ####
-# Copy code on local feature selection here
+# TO DO: 
+# Simplify and copy code on local feature selection here, or at least get the other script running and source it here. 
 
 #### Set up climate variable combinations: ####
 # First, just seasonal PPT, Tmax, Tmin: 
@@ -232,21 +225,10 @@ BGCs_pre_downsample <- trainData %>%
   dplyr::summarize (n = n()) %>%
   dplyr::arrange(n)
 
-# Calculate area of each BGC: 
-bgcs_areas <- st_area(bgcs)
-bgcs_dt <- as.data.table(bgcs)
-bgcs_dt[, area_sq_km := as.numeric(bgcs_areas) / 1e6]
-bgcs_dt <- bgcs_dt[, .(BGC, area_sq_km)]
-
-bgcs_dt <- merge(bgcs_dt, BGCs_pre_downsample, by = "BGC")
-
-ggplot(bgcs_dt, aes(x = area_sq_km, y = n)) +
-  geom_point()
-
 # We do want to remove BAFA and "un" subzones (unvegetated and odd to predict): 
-trainData <- trainData[!grepl("un|BAFA", trainData$BGC), ]
+# trainData <- trainData[!grepl("un|BAFA", trainData$BGC), ]
 
-# Define bad BGCs and remove them: (These were selected in the RMarkdown script but I'm not sure why.) 
+# Define bad BGCs and remove them: (These were selected in the RMarkdown script by Will/Kiri/Courtney but I'm not sure why.) 
 # badbgcs <- c("BWBSvk", "ICHmc1a", "MHun", "SBSun", "ESSFun", "SWBvk","MSdm3","ESSFdc3", "IDFdxx_WY", "MSabS", "FGff", "JPWmk_WY" )#, "ESSFab""CWHws2", "CWHwm", "CWHms1" , 
 # trainData_bad <- trainData[BGC %in% badbgcs,]
 
@@ -255,8 +237,8 @@ trainData <- trainData[!grepl("un|BAFA", trainData$BGC), ]
 # trainData <- rmLowSampleBGCs(trainData) |>
 #   Cache()
 
-# TO DO: Figure out if this is necessary/the best way to do it. It ensures that at most, larger BGCs have at most 90x as many rows as smallest BGC but it sets a ceiling for number of points. 
-
+# TO DO: 
+# Figure out if this is necessary/the best way to do it. It ensures that at most, larger BGCs have at most 90x as many rows as smallest BGC but it sets a ceiling for number of points. Might be better to find a technique that just smooths everything out instead of strict upper/lower cutoffs. 
 # # Subsample "oversampled" BGCs. This cuts them off at 90, if all BGCs are left in the sample, including those with only 1 point. 
 # dataBalance_recipe <- recipe(BGC ~ ., data =  trainData) |>
 #   step_downsample(BGC, under_ratio = 90) |>  ## subsamples "oversampled" BGCs
@@ -267,7 +249,7 @@ trainData <- trainData[!grepl("un|BAFA", trainData$BGC), ]
 #   juice() |>
 #   as.data.table()
 
-# See how many BGCs per with the downsample: 
+# See how many points per BGC with the downsample: 
 # BGCs_post_downsample <- trainData_balanced %>% 
 #   dplyr::group_by(BGC) %>% 
 #   dplyr::summarize (n = n()) %>% 
@@ -279,3 +261,5 @@ trainData <- trainData[!grepl("un|BAFA", trainData$BGC), ]
 
 # TO DO: 
 # Save final training point set(s). 
+
+write.csv(trainData, "data-generated/trainData-no-removals.csv", row.names = FALSE)
