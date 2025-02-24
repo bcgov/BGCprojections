@@ -3,6 +3,7 @@
 ## February 2025
 
 library(climr)
+library(ccissr)
 library(data.table)
 library(terra)
 library(sf)
@@ -10,7 +11,6 @@ library(foreach) # for outlier removal function
 
 # Source functions TODO: move these into ccissr as independent functions
 source("utils.R")
-source("bgc_trainingSample.R")
 
 studyarea <- ext(c(-123, -122, 50.5, 51)) 
 
