@@ -4,6 +4,9 @@
 library(terra)
 library(sf)
 
+# import DEM
+dem <- rast("C:/Users/CMAHONY/Government of BC/Future Forest Ecosystems Centre - CCISS - CCISS/ccissv13_workingfiles/BGC_modelling//WNA_DEM_4326_clipped.tif")
+
 # read in previous version of WNA BGC and reclassify minor units
 bgcs <- st_read("C:/Users/CMAHONY/Government of BC/Future Forest Ecosystems Centre - CCISS - CCISS/ccissv13_workingfiles/BGC_modelling/WNA_BGC_v13_15Nov2024.gpkg")
 bgcs <- st_transform(bgcs,4326)
