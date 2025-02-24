@@ -253,37 +253,6 @@ getClimate <- function(coords, crs = NULL, ...) {
   return(clim_vars)
 }
 
-#' Add extra climate variables
-#'
-#' @param dat a `data.table` with columns:
-#'    * PPT05, PPT06, PPT07, PPT08, PPT09 (May, ..., September precip), 
-#'    PPT_at (autumn precip), PPT_wt (winter precip)
-#'    * CMD07 (July climate moisture deficit), CMD (annual CMD)
-#'    * DD_0_at (autumn degree-days below 0 deg), DD_0_wt (winter degree-days below 0 deg)
-#'    
-#' @details This function calculates more climate variables derived from those
-#'   output by `climr_downscale`. Presently it adds the following:
-#'   *   May to June precip.: \eqn{PPT_MJ = PPT05 + PPT06}
-#'   *   July to September precip \eqn{PPT_JAS = PPT07 + PPT08 + PPT09}
-#'   *   Precipitation during vegetation dormant period: \eqn{PPT.dormant = PPT_at + PPT_wt}
-#'   *   CMD deficit \eqn{CMD.def = 500 - PPT.dormant} (bounded to 0)
-#'   *   \eqn{CMDMax = CMD07}
-#'   *   \eqn{CMD.total = CMD.def + CMD}
-#'   *   \eqn{DD_delayed = ((DD_0_at + DD_0_wt)*0.0238) - 1.8386} bounded to 0)
-#'  
-#' @return `dat` with all of the above added climate variables.
-#' @export
-#'
-#' @examples
-addVars <- function(dat) {
-  dat[, PPT_MJ := PPT05 + PPT06]
-  dat[, PPT_JAS := PPT07 + PPT08 + PPT09]
-  dat[, PPT.dormant := PPT_at + PPT_wt]
-  dat[, CMD.def := pmax(0, 500 - PPT.dormant)]
-  dat[, CMDMax := CMD07]   ## TODO: THIS IS NOT NECESSARILY CMD MAX
-  dat[, CMD.total := CMD.def + CMD]
-  dat[, DD_delayed := pmax(0, ((DD_0_at + DD_0_wt)*0.0238) - 1.8386)]
-}
 
 #' Log-transform climate variables
 #'
@@ -342,58 +311,6 @@ logVars <- function(dat,
 }
 
 
-#' Remove outliers from data
-#'
-#' @param dat a `data.table` target data to "clean"
-#' @param alpha numeric. The alpha value used to determine the cutoff for outliers.
-#' @param vars character. Names of columns from which outliers should be excluded.
-#' 
-#' @details TODO. Parallelizes computations internally with `foreach`.
-#'
-#' @return
-#' @seealso [foreach::foreach()]
-#' 
-#' @importFrom foreach foreach %do%
-#' @importFrom stats mahalanobis qchisq cov
-#' 
-#' @export
-removeOutlier <- function(dat, alpha, vars){
-  out <- foreach(curr = unique(as.character(dat$BGC)), .combine = rbind) %do% {
-    temp <- dat[dat$BGC == curr,]
-    ## log-transform ratio variables and subset for just the variables that we are analyzing for outliers
-    popn <- logVars(temp[,..vars], zero_adjust = TRUE)  
-    ## remove variables with non-finite values in the target population (this is an edge case that occurs when the target population has a variable (typically CMD) with only zeroes)
-    popn <- popn[, lapply(.SD, function(x) if (all(is.finite(x))) x else NULL)]
-    ## z-standardize
-    clim.mean <- popn[, lapply(.SD, mean, na.rm = TRUE)]
-    clim.sd <- popn[, lapply(.SD, sd, na.rm = TRUE)]
-    popn[, (names(popn)) := lapply(names(popn), function(col) {
-      (get(col) - unlist(clim.mean)[col]) / unlist(clim.sd)[col]
-    })]
-    ## M distance
-    md <- tryCatch(mahalanobis(popn,
-                               center = colMeans(popn),
-                               cov = cov(popn)), error = function(e) e)
-    if (!inherits(md,"error")){
-      ctf <- qchisq(1-alpha, df = ncol(popn)-1)
-      outl <- which(md > ctf)
-      message(paste("Removing", length(outl), "outliers from", curr, "; "), sep = " ")
-      if (length(outl) > 0){
-        temp <- temp[-outl,]
-      }
-    }
-    temp
-  }
-  return(out)
-}
-
-## rough Example (need to create sample data)
-# dat <- trainData
-# before <- trainData[BGC=="CWHvm1",.(BGC, Tmax_sm, PPT_sm)]
-# after <- removeOutlier(before, alpha=0.0027, vars = c("Tmax_sm", "PPT_sm"))
-# 
-# plot(logVars(before[, .(Tmax_sm, PPT_sm)]))
-# points(logVars(after[, .(Tmax_sm, PPT_sm)]), pch=16, col="red")
 
 
 #' Remove BGCs with low sample sizes
