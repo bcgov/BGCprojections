@@ -306,7 +306,7 @@ addVars <- function(dat) {
 #'
 #' @examples
 logVars <- function(dat,
-                    elements = c("AHM", "DD", "Eref", "FFP", "NFFD", "PAS", "PPT", "SHM", "CMI"),
+                    elements = c("AHM", "DD", "Eref", "FFP", "NFFD", "PAS", "PPT", "SHM", "CMD"),
                     base = exp(1),
                     add.fields = FALSE,
                     zero_adjust = FALSE) {
@@ -346,7 +346,7 @@ logVars <- function(dat,
 #'
 #' @param dat a `data.table` target data to "clean"
 #' @param alpha numeric. The alpha value used to determine the cutoff for outliers.
-#' @param IDvars character. Names of columns from which outliers should be excluded.
+#' @param vars character. Names of columns from which outliers should be excluded.
 #' 
 #' @details TODO. Parallelizes computations internally with `foreach`.
 #'
@@ -360,11 +360,22 @@ logVars <- function(dat,
 removeOutlier <- function(dat, alpha, vars){
   out <- foreach(curr = unique(as.character(dat$BGC)), .combine = rbind) %do% {
     temp <- dat[dat$BGC == curr,]
-    md <- tryCatch(mahalanobis(temp[, vars],
-                               center = colMeans(temp[, vars]),
-                               cov = cov(temp[, vars])), error = function(e) e)
+    ## log-transform ratio variables and subset for just the variables that we are analyzing for outliers
+    popn <- logVars(temp[,..vars], zero_adjust = TRUE)  
+    ## remove variables with non-finite values in the target population (this is an edge case that occurs when the target population has a variable (typically CMD) with only zeroes)
+    popn <- popn[, lapply(.SD, function(x) if (all(is.finite(x))) x else NULL)]
+    ## z-standardize
+    clim.mean <- popn[, lapply(.SD, mean, na.rm = TRUE)]
+    clim.sd <- popn[, lapply(.SD, sd, na.rm = TRUE)]
+    popn[, (names(popn)) := lapply(names(popn), function(col) {
+      (get(col) - unlist(clim.mean)[col]) / unlist(clim.sd)[col]
+    })]
+    ## M distance
+    md <- tryCatch(mahalanobis(popn,
+                               center = colMeans(popn),
+                               cov = cov(popn)), error = function(e) e)
     if (!inherits(md,"error")){
-      ctf <- qchisq(1-alpha, df = ncol(temp)-1)
+      ctf <- qchisq(1-alpha, df = ncol(popn)-1)
       outl <- which(md > ctf)
       message(paste("Removing", length(outl), "outliers from", curr, "; "), sep = " ")
       if (length(outl) > 0){
@@ -375,6 +386,15 @@ removeOutlier <- function(dat, alpha, vars){
   }
   return(out)
 }
+
+## rough Example (need to create sample data)
+# dat <- trainData
+# before <- trainData[BGC=="CWHvm1",.(BGC, Tmax_sm, PPT_sm)]
+# after <- removeOutlier(before, alpha=0.0027, vars = c("Tmax_sm", "PPT_sm"))
+# 
+# plot(logVars(before[, .(Tmax_sm, PPT_sm)]))
+# points(logVars(after[, .(Tmax_sm, PPT_sm)]), pch=16, col="red")
+
 
 #' Remove BGCs with low sample sizes
 #'
@@ -400,6 +420,43 @@ vertDist <- function(x) {
 
 sideLen <- function(x) {
   x/sqrt(3)
+}
+
+
+
+#' calculate an asymptotic subsample size conditional on the population size of each BGC unit. 
+#'
+#' This function applies an asymptotic exponential subsampling transformation to a numeric vector.
+#' Values below the threshold remain unchanged, while values above it are transformed
+#' using an asymptotic function to ensure a smooth transition and prevent values from exceeding
+#' the original input.
+#'
+#' Optionally, the function can generate a plot illustrating the transformation.
+#'
+#' @param N A numeric vector representing the population size in each class.
+#' @param asymptote A numeric value specifying the maximum possible subsampled value. Default is 2000.
+#' @param threshold A numeric value specifying the point at which subsampling begins. Default is asymptote/20.
+#' @param shape A numeric parameter controlling the rate of subsampling. Smaller values lead to a more gradual transition. Default is 1/asymptote.
+#'
+#' @return A numeric vector of the same length as `N`, where values above `threshold` are transformed
+#'         and rounded to the nearest integer. 
+#' 
+#' @examples
+#' # Generate subsampled values
+#' x <- seq(0, 10000, 50)
+#' y <- subsample(x)
+#' plot(x, y, type = "l", col = "blue", lwd = 2, main = "Subsampling Function", xlab = "Population size", ylab = "Sample size")
+#' abline(a = 0, b = 1, col = "gray", lty = 2)
+#'
+#' @export
+subsample_asymptotic <- function(N, asymptote = 2000, threshold = NULL, shape = NULL) {
+  if(is.null(threshold)) threshold <- asymptote/20
+  if(is.null(shape)) shape <- 1/asymptote
+  above_thresh <- N > threshold
+  n <- N
+  n[above_thresh] <- threshold + (asymptote - threshold) * (1 - exp(-shape * (N[above_thresh] - threshold)))
+  n[n>N] <- N[n>N]
+  return(round(n))
 }
 
 
