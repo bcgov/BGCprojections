@@ -32,11 +32,11 @@ trainingSample_V1 <- bgc_trainingSample(dem, bgcs, bgcs_info = bgcs_info,
                            climaticVariance = TRUE, climaticVariance.var = "MAT",
                            bgcs.remove = "MSSDun_NV",
                            plotDiagnostics = TRUE, 
-                           plot.dir = "data-generated", 
+                           plot.dir = "//objectstore2.nrs.bcgov/ffec/BGC_models", 
                            plot.name = "diagnostics_v1"
                            )
 dim(trainingSample_V1)
-write.csv(trainingSample_V1, "data-generated/points_WNA_v1.csv", row.names = FALSE)
+write.csv(trainingSample_V1, "//objectstore2.nrs.bcgov/ffec/BGC_models/points_WNA_v1.csv", row.names = FALSE)
 
 trainingSample_V2 <- bgc_trainingSample(dem, bgcs, bgcs_info = bgcs_info,
                                         scheme = "squareRoot", 
@@ -46,11 +46,11 @@ trainingSample_V2 <- bgc_trainingSample(dem, bgcs, bgcs_info = bgcs_info,
                                         climaticVariance = TRUE, climaticVariance.var = "MAT",
                                         bgcs.remove = "MSSDun_NV",
                                         plotDiagnostics = TRUE, 
-                                        plot.dir = "data-generated", 
+                                        plot.dir = "//objectstore2.nrs.bcgov/ffec/BGC_models", 
                                         plot.name = "diagnostics_v2"
 )
 dim(trainingSample_V2)
-write.csv(trainingSample_V2, "data-generated/points_WNA_v2.csv", row.names = FALSE)
+write.csv(trainingSample_V2, "//objectstore2.nrs.bcgov/ffec/BGC_models/points_WNA_v2.csv", row.names = FALSE)
 
 trainingSample_V3 <- bgc_trainingSample(dem, bgcs, bgcs_info = bgcs_info,
                                         scheme = "asymptotic", asymptote = 2000, 
@@ -59,11 +59,11 @@ trainingSample_V3 <- bgc_trainingSample(dem, bgcs, bgcs_info = bgcs_info,
                                         climaticVariance = FALSE,
                                         bgcs.remove = "MSSDun_NV",
                                         plotDiagnostics = TRUE, 
-                                        plot.dir = "data-generated", 
+                                        plot.dir = "//objectstore2.nrs.bcgov/ffec/BGC_models", 
                                         plot.name = "diagnostics_v3"
 )
 dim(trainingSample_V3)
-write.csv(trainingSample_V3, "data-generated/points_WNA_v3.csv", row.names = FALSE)
+write.csv(trainingSample_V3, "//objectstore2.nrs.bcgov/ffec/BGC_models/points_WNA_v3.csv", row.names = FALSE)
 
 trainingSample_V4 <- bgc_trainingSample(dem, bgcs, bgcs_info = bgcs_info,
                                         scheme = "squareRoot", 
@@ -73,12 +73,12 @@ trainingSample_V4 <- bgc_trainingSample(dem, bgcs, bgcs_info = bgcs_info,
                                         climaticVariance = TRUE, climaticVariance.var = "MAT",
                                         bgcs.remove = "MSSDun_NV",
                                         plotDiagnostics = TRUE, 
-                                        plot.dir = "data-generated", 
+                                        plot.dir = "//objectstore2.nrs.bcgov/ffec/BGC_models", 
                                         plot.name = "diagnostics_v4"
 )
 dim(trainingSample_V4)
-write.csv(trainingSample_V4, "data-generated/points_WNA_v4.csv", row.names = FALSE)
-trainingSample_V4 <- fread("data-generated/points_WNA_v4.csv")
+write.csv(trainingSample_V4, "//objectstore2.nrs.bcgov/ffec/BGC_models/points_WNA_v4.csv", row.names = FALSE)
+trainingSample_V4 <- fread("//objectstore2.nrs.bcgov/ffec/BGC_models/points_WNA_v4.csv")
 
 
 ## -------------------------------------------------
@@ -106,7 +106,7 @@ vars_expert <- c("CMD_sm", "DDsub0_sp", "DD5_sp", "Eref_sm", "Eref_sp",
 ## V1 RF model
 
 #read in training sample generated in the last step
-points <- fread("data-generated/points_WNA_v1.csv")
+points <- fread("//objectstore2.nrs.bcgov/ffec/BGC_models/points_WNA_v1.csv")
 
 ## climate data for all points
 clim <- downscale(
@@ -136,13 +136,13 @@ BGCmodel <- ranger(
   keep.inbag = FALSE, 
 ) 
 print(paste0("OOB error: ", round(100*BGCmodel$prediction.error, 2), "%")) # OOB prediction error
-saveRDS(BGCmodel, "RF_models/BGCmodel_WNA_V1.rds") 
+saveRDS(BGCmodel, "//objectstore2.nrs.bcgov/ffec/BGC_models/BGCmodel_WNA_V1.rds") 
 
 ## -------------------------------------------------
 ## V2 RF model
 
 #read in training sample generated in the last step
-points <- fread("data-generated/points_WNA_v2.csv")
+points <- fread("//objectstore2.nrs.bcgov/ffec/BGC_models/points_WNA_v2.csv")
 
 ## climate data for all points
 clim <- downscale(
@@ -172,7 +172,7 @@ BGCmodel <- ranger(
   keep.inbag = FALSE, 
 ) 
 print(paste0("OOB error: ", round(100*BGCmodel$prediction.error, 2), "%")) # OOB prediction error
-saveRDS(BGCmodel, "RF_models/BGCmodel_WNA_V2.rds") 
+saveRDS(BGCmodel, "//objectstore2.nrs.bcgov/ffec/BGC_models/BGCmodel_WNA_V2.rds") 
 
 # Train model 
 BGCmodel <- ranger(
@@ -189,13 +189,13 @@ BGCmodel <- ranger(
   keep.inbag = FALSE, 
 ) 
 print(paste0("OOB error: ", round(100*BGCmodel$prediction.error, 2), "%")) # OOB prediction error
-saveRDS(BGCmodel, "RF_models/BGCmodel_WNA_V2.1.rds") 
+saveRDS(BGCmodel, "//objectstore2.nrs.bcgov/ffec/BGC_models/BGCmodel_WNA_V2.1.rds") 
 
 ## -------------------------------------------------
 ## V3 RF model
 
 #read in training sample generated in the last step
-points <- fread("data-generated/points_WNA_v3.csv")
+points <- fread("//objectstore2.nrs.bcgov/ffec/BGC_models/points_WNA_v3.csv")
 
 ## climate data for all points
 clim <- downscale(
@@ -225,13 +225,13 @@ BGCmodel <- ranger(
   keep.inbag = FALSE, 
 ) 
 print(paste0("OOB error: ", round(100*BGCmodel$prediction.error, 2), "%")) # OOB prediction error
-saveRDS(BGCmodel, "RF_models/BGCmodel_WNA_V3.rds") 
+saveRDS(BGCmodel, "//objectstore2.nrs.bcgov/ffec/BGC_models/BGCmodel_WNA_V3.rds") 
 
 ## -------------------------------------------------
 ## V4 RF model
 
 #read in training sample generated in the last step
-points <- fread("data-generated/points_WNA_v4.csv")
+points <- fread("//objectstore2.nrs.bcgov/ffec/BGC_models/points_WNA_v4.csv")
 
 ## climate data for all points
 clim <- downscale(
@@ -261,13 +261,13 @@ BGCmodel <- ranger(
   keep.inbag = FALSE, 
 ) 
 print(paste0("OOB error: ", round(100*BGCmodel$prediction.error, 2), "%")) # OOB prediction error
-saveRDS(BGCmodel, "RF_models/BGCmodel_WNA_V4.rds") 
+saveRDS(BGCmodel, "//objectstore2.nrs.bcgov/ffec/BGC_models/BGCmodel_WNA_V4.rds") 
 
 ## -------------------------------------------------
 ## V4.1 RF model
 
 #read in training sample generated in the last step
-points <- fread("data-generated/points_WNA_v4.csv")
+points <- fread("//objectstore2.nrs.bcgov/ffec/BGC_models/points_WNA_v4.csv")
 
 ## climate data for all points
 clim <- downscale(
@@ -297,7 +297,7 @@ BGCmodel <- ranger(
   keep.inbag = FALSE, 
 ) 
 print(paste0("OOB error: ", round(100*BGCmodel$prediction.error, 2), "%")) # OOB prediction error
-saveRDS(BGCmodel, "RF_models/BGCmodel_WNA_V4.1.rds") 
+saveRDS(BGCmodel, "//objectstore2.nrs.bcgov/ffec/BGC_models/BGCmodel_WNA_V4.1.rds") 
 
 ## -------------------------------------------------
 ## -------------------------------------------------
@@ -339,11 +339,11 @@ results.error <- data.table(
 loaded_objects <- load("C:/Users/CMAHONY/Government of BC/Future Forest Ecosystems Centre - CCISS - CCISS/ccissv13_workingfiles/BGC_modelling/Trained_Models/BGC_RFresp.Rdata")
 print(loaded_objects)
 
-BGCmodel_v1 <- readRDS("RF_models/BGCmodel_WNA_V1.rds")
-BGCmodel_v2 <- readRDS("RF_models/BGCmodel_WNA_V2.rds")
-BGCmodel_v2.1 <- readRDS("RF_models/BGCmodel_WNA_V2.1.rds")
-BGCmodel_v3 <- readRDS("RF_models/BGCmodel_WNA_V3.rds")
-BGCmodel_v4 <- readRDS("RF_models/BGCmodel_WNA_V4.rds")
+BGCmodel_v1 <- readRDS("//objectstore2.nrs.bcgov/ffec/BGC_models/BGCmodel_WNA_V1.rds")
+BGCmodel_v2 <- readRDS("//objectstore2.nrs.bcgov/ffec/BGC_models/BGCmodel_WNA_V2.rds")
+BGCmodel_v2.1 <- readRDS("//objectstore2.nrs.bcgov/ffec/BGC_models/BGCmodel_WNA_V2.1.rds")
+BGCmodel_v3 <- readRDS("//objectstore2.nrs.bcgov/ffec/BGC_models/BGCmodel_WNA_V3.rds")
+BGCmodel_v4 <- readRDS("//objectstore2.nrs.bcgov/ffec/BGC_models/BGCmodel_WNA_V4.rds")
 
 
 ## -------------------------------------------------
@@ -542,12 +542,12 @@ results.error[6, which(names(results.error)==studyname)] <- mean(values(bgcs_385
 
 print(studyname)
 }
-write.csv(results.error, "data-generated/results.error.csv", row.names = FALSE)
-results.error <- fread("data-generated/results.error.csv")
+write.csv(results.error, "//objectstore2.nrs.bcgov/ffec/BGC_models/results.error.csv", row.names = FALSE)
+results.error <- fread("//objectstore2.nrs.bcgov/ffec/BGC_models/results.error.csv")
 results.error[, BC := NA_real_]
 
 # Plot of error results
-plot.dir = "data-generated"
+plot.dir = "//objectstore2.nrs.bcgov/ffec/BGC_models"
 plot.name = "SamplingTrials_error"
 png(filename=paste0(plot.dir, "/", plot.name, ".png",sep="."), type="cairo", units="in", width=6.5, height=4, pointsize=10, res=300)
 error_matrix <- as.matrix(results.error[, -1, with = FALSE])

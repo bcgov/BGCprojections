@@ -200,7 +200,7 @@ for(studyname in studynames){
   ## -----------------------------------------------------------------------
   ## write points to file
   
-  # write.csv(points, "data-generated/points_studyArea.csv", row.names = FALSE)
+  # write.csv(points, "//objectstore2.nrs.bcgov/ffec/BGC_models/points_studyArea.csv", row.names = FALSE)
   
   
   ## -------------------------------------------------
@@ -223,7 +223,7 @@ for(studyname in studynames){
   # values(X) <- NA
   # 
   # #read in point attributes generated in the last step
-  # points <- fread("data-generated/points_studyArea.csv")
+  # points <- fread("//objectstore2.nrs.bcgov/ffec/BGC_models/points_studyArea.csv")
   # values(X) <- NA; values(X)[points$id] <- points$gap ; plot(X)
   
   ## -------------------------------------------------
@@ -794,7 +794,7 @@ for(studyname in studynames){
   print(studyname)
 } #end of biggest loop
 
-write.csv(results, "data-generated/sensitivity_results_v2.csv", row.names = FALSE)
+write.csv(results, "//objectstore2.nrs.bcgov/ffec/BGC_models/sensitivity_results_v2.csv", row.names = FALSE)
 
 
 ## -------------------------------------------------
@@ -803,7 +803,7 @@ write.csv(results, "data-generated/sensitivity_results_v2.csv", row.names = FALS
 ## -------------------------------------------------
 ## -------------------------------------------------
 
-results <- fread("data-generated/sensitivity_results.csv")
+results <- fread("//objectstore2.nrs.bcgov/ffec/BGC_models/sensitivity_results.csv")
 
 ## -------------------------------------------------
 ## Plot 1 - gap error for the maxSample experiment
