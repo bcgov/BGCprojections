@@ -59,7 +59,7 @@ for(studyname in studynames){
   ## -------------------------------------------------
   ## attribute the points table with BGC label
   
-  bgcs <- rast("C:/Users/CMAHONY/Government of BC/Future Forest Ecosystems Centre - CCISS - CCISS/ccissv13_workingfiles/BGC_modelling/WNA_BGC_v13_15Nov2024_raster.tif")
+  bgcs <- rast("C:/Users/CMAHONY/Government of BC/Future Forest Ecosystems Centre - CCISS - CCISS/ccissv13_workingfiles/BGC_modelling/WNA_BGC_v13_22Feb2025_raster.tif")
   bgcs <- crop(bgcs, studyarea)
   points.bgc <- as.data.table(bgcs, cells=T, xy=T)
   colnames(points.bgc) <- c("id", "lon", "lat", "BGC")
