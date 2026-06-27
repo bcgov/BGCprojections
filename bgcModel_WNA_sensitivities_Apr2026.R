@@ -77,7 +77,7 @@ dim(trainingSample_V4)
 
 write.csv(trainingSample_V4, paste0(dir, "points_WNA_v4.csv"), row.names = FALSE)
 
-# downsample non-BC units
+# downsample non-BC units (using the default n=2000 asymptote)
 trainingSample_V4 <- fread(paste0(dir, "points_WNA_v4.csv"))
 bgcs_nonBC <- bgcs_info[grep("USA_|AB_", bgcs_info$Source), BGC]
 # #simple downsampling
@@ -120,6 +120,63 @@ trainingSample_V5 <- bgc_trainingSample(dem, bgcs, bgcs_info = bgcs_info,
 dim(trainingSample_V5)
 
 write.csv(trainingSample_V5, paste0(dir, "points_WNA_v5.csv"), row.names = FALSE)
+
+## -------------------------------------------------
+## technical report figure of training sample
+
+points <- fread(paste0(dir, "points_WNA_v4a.csv"))
+popn <- setDT(freq(bgcs))
+head(popn)
+samp <- as.data.table(table(points$BGC))
+samp
+
+setnames(samp, "V1", "BGC")
+samp[, count := popn[.SD, on = .(value = BGC), x.count]]
+samp[, count := popn[.SD, on = .(value = BGC), x.count]]
+
+bgcs_nonBC <- bgcs_info[grep("USA_|AB_", bgcs_info$Source), BGC]
+
+
+figdir <- "C:/Users/CMAHONY/Government of BC/Future Forest Ecosystems Centre - CCISS - CCISS/CCISS_Manual/Figures/"
+png(filename=paste0(figdir, "sampleSize_v4a.png",sep="."), type="cairo", units="in", width=6.5, height=6.5, pointsize=12, res=300)
+par(mfrow=c(1,1), mar = c(3,4,1,1), mgp=c(1.75,0.25,0), tck=-0.005)
+
+# plot setup
+x <- log10(samp[, count])
+y <- log2(samp[, N])
+z <- samp[, BGC]
+plot(x, y, col = "white",
+     xaxt = "n", yaxt = "n",
+     ylab = "",
+     xlab = paste0("BGC unit area (number of cells)"),
+)
+axis(1, at = seq(1,20), labels = round(10^seq(1,20)))
+axis(2, at = 1:99, labels = 2^(1:99), las=2)
+par(mgp=c(2.75,0.25,0))
+title(ylab = "Sample size of BGC Unit")
+
+# line of square-root proportionality
+z <- 10^seq(0, 7, 0.01)
+x <- log10(z)
+y <- log2(z^0.5*10)
+lines(x,y, col="gray")
+
+# plot of BGC subsample size vs BGC area - BC UNITS
+x <- log10(samp[-which(BGC %in% bgcs_nonBC), count])
+y <- log2(samp[-which(BGC %in% bgcs_nonBC), N])
+z <- samp[-which(BGC %in% bgcs_nonBC), BGC]
+text(x, y, labels = z, cex = 0.5)
+
+# plot of BGC subsample size vs BGC area - NON-BC UNITS
+x <- log10(samp[which(BGC %in% bgcs_nonBC), count])
+y <- log2(samp[which(BGC %in% bgcs_nonBC), N])
+z <- samp[which(BGC %in% bgcs_nonBC), BGC]
+text(x, y, labels = z, cex = 0.5, col="blue")
+
+legend("topleft", legend=c("BC units", "Non-BC units"), fill = c("black", "blue"), bty="n")
+
+dev.off()
+par(mfrow=c(1,1))
 
 
 ## -------------------------------------------------
@@ -190,6 +247,10 @@ saveRDS(BGCmodel, paste0(dir, "BGCmodel_WNA_V2.2.rds"))
 #read in training sample generated in the last step
 points <- fread(paste0(dir, "points_WNA_v4a.csv"))
 
+# count of training points by region
+points_counts <- points[bgcs_info, on = "BGC", nomatch = 0][, .N, by = Source]
+points_counts[Source %in% c("AB_", "USA_", "BC_")]
+
 ## climate data for all points
 clim <- downscale(
   xyz = points,
@@ -226,6 +287,93 @@ BGCmodel <- ranger(
 print(paste0("OOB error: ", round(100*BGCmodel$prediction.error, 2), "%")) # OOB prediction error
 saveRDS(BGCmodel, paste0(dir, "BGCmodel_WNA_V4.2.rds"))
 
+## -------------------------------------------------
+## V4.3 RF model - [v4 sample with asymptotic reduction in non-BC units] + [Tuning]
+
+#read in training sample generated in the last step
+points <- fread(paste0(dir, "points_WNA_v4a.csv"))
+
+## climate data for all points
+clim <- downscale(
+  xyz = points,
+  which_refmap = "refmap_climr",
+  return_refperiod = TRUE, # Also return the 1961-1990 normals period.
+  vars = list_vars()
+)
+ccissr::addVars(clim)
+
+trainData <- merge(points, clim, by="id")
+
+# remove points that climr does not return full data for 
+num_cols <- names(trainData)[sapply(trainData, is.numeric)]
+bad_rows <- trainData[, !Reduce(`&`, lapply(.SD, is.finite)), .SDcols = num_cols]
+sum(bad_rows)
+trainData <- trainData[!bad_rows]
+
+trainData[, BGC := as.factor(BGC)]
+
+# Train model 
+BGCmodel <- ranger(
+  BGC ~ .,
+  data = trainData[, c("BGC", vars_expert), with = FALSE],
+  num.trees = 1000,
+  splitrule =  "extratrees", # way faster than gini, not likely a big performance difference, but we should test this. 
+  min.node.size = 1, # Default is 1. 
+  num.random.splits = 1,
+  importance = 'none',
+  write.forest = TRUE,
+  classification = TRUE,
+  num.threads = 14,  # Adjust to fewer threads to reduce memory usage
+  probability = FALSE, 
+  replace = FALSE,
+) 
+print(paste0("OOB error: ", round(100*BGCmodel$prediction.error, 2), "%")) # OOB prediction error
+saveRDS(BGCmodel, paste0(dir, "BGCmodel_WNA_V4.3.rds"))
+
+## -------------------------------------------------
+## V4.4 RF model - [v4 sample with asymptotic reduction in non-BC units] + [Tuning based on sensitivity analyses]
+
+#read in training sample generated in the last step
+points <- fread(paste0(dir, "points_WNA_v4a.csv"))
+
+## climate data for all points
+clim <- downscale(
+  xyz = points,
+  which_refmap = "refmap_climr",
+  return_refperiod = TRUE, # Also return the 1961-1990 normals period.
+  vars = list_vars()
+)
+ccissr::addVars(clim)
+
+trainData <- merge(points, clim, by="id")
+
+# remove points that climr does not return full data for 
+num_cols <- names(trainData)[sapply(trainData, is.numeric)]
+bad_rows <- trainData[, !Reduce(`&`, lapply(.SD, is.finite)), .SDcols = num_cols]
+sum(bad_rows)
+trainData <- trainData[!bad_rows]
+
+trainData[, BGC := as.factor(BGC)]
+
+# Train model 
+BGCmodel <- ranger(
+  BGC ~ .,
+  data = trainData[, c("BGC", vars_expert), with = FALSE],
+  num.trees = 1000,
+  splitrule =  "extratrees", # way faster than gini, not likely a big performance difference, but we should test this. 
+  min.node.size = 1, # Default is 1. 
+  num.random.splits = 1,
+  # importance = 'permutation',
+  importance = 'none',
+  write.forest = TRUE,
+  classification = TRUE,
+  num.threads = 14,  # Adjust to fewer threads to reduce memory usage
+  probability = FALSE, 
+  replace = FALSE,
+) 
+print(paste0("OOB error: ", round(100*BGCmodel$prediction.error, 2), "%")) # OOB prediction error
+saveRDS(BGCmodel, paste0(dir, "BGCmodel_WNA_V4.4.rds"))
+
 
 ## -------------------------------------------------
 ## -------------------------------------------------
@@ -258,13 +406,14 @@ color_pal <- colorFactor(
 dir <- "C:/Users/CMAHONY/Data/BGC_models/" #local copy, for speed
 
 BGCmodel_v4.2 <- readRDS(paste0(dir, "BGCmodel_WNA_v4.2.rds"))
-BGCmodel_v2.2 <- readRDS(paste0(dir, "BGCmodel_WNA_V2.2.rds"))
-
+BGCmodel_V4.2gini <- readRDS(paste0(dir, "BGCmodel_WNA_V4.2gini.rds")) #Kiri trained this on Thufir using the Gini split rule. 
+BGCmodel_v4.3 <- readRDS(paste0(dir, "BGCmodel_WNA_v4.3.rds")) # v4a sample with alternative model tunings for potentially improved prediction performance (less overfitting)
+BGCmodel_v4.4 <- readRDS(paste0(dir, "BGCmodel_WNA_v4.4.rds")) # v4a sample with model tunings based on sensitivity analysis
 
 
 # data.table to store results of sensitivity analyses
 results.error <- data.table(
-  model       = c("v4.2", "v2.2"),
+  model       = c("v4.2", "V4.2gini", "V4.3", "V4.4"),
   Bamfield    = NA_real_,
   Kamloops    = NA_real_,
   Pemberton   = NA_real_,
@@ -307,7 +456,7 @@ for(studyname in studynames){
     # study area DEM
     dem <- rast("C:/Users/CMAHONY/Government of BC/Future Forest Ecosystems Centre - CCISS - CCISS/ccissv13_workingfiles/BGC_modelling/WNA_DEM_4326_clipped.tif")
     dem <- crop(dem, studyarea)
-    plot(dem)
+    # plot(dem)
     X <- dem # template raster for testing
     values(X) <- NA
     
@@ -366,19 +515,43 @@ for(studyname in studynames){
   preds_proj_v4.2 <- X
   preds_proj_v4.2[points$id] <- factor(preds_proj_v4.2_vec, levels = subzones_colours_ref$BGC)
   preds_proj_v4.2 <- project(preds_proj_v4.2, "EPSG:3857", method = "near") #have to manually resample to web mercator with nearest neighbour sampling otherwise leaflet will do so using bilinear interpolation which corrupts the factor levels at polygon boundaries.
+
+  ## V4.2gini model predictions for reference period
+  preds_ref_V4.2gini_vec <- predict(BGCmodel_V4.2gini, data = clim_ref)$prediction
+  preds_ref_V4.2gini <- X
+  preds_ref_V4.2gini[points$id] <- factor(preds_ref_V4.2gini_vec, levels = subzones_colours_ref$BGC)
+  preds_ref_V4.2gini <- project(preds_ref_V4.2gini, "EPSG:3857", method = "near") #have to manually resample to web mercator with nearest neighbour sampling otherwise leaflet will do so using bilinear interpolation which corrupts the factor levels at polygon boundaries.
+
+  ## V4.2gini model predictions for future period
+  preds_proj_V4.2gini_vec <- predict(BGCmodel_V4.2gini, data = clim_proj)$prediction
+  preds_proj_V4.2gini <- X
+  preds_proj_V4.2gini[points$id] <- factor(preds_proj_V4.2gini_vec, levels = subzones_colours_ref$BGC)
+  preds_proj_V4.2gini <- project(preds_proj_V4.2gini, "EPSG:3857", method = "near") #have to manually resample to web mercator with nearest neighbour sampling otherwise leaflet will do so using bilinear interpolation which corrupts the factor levels at polygon boundaries.
+
+  ## v4.3 model predictions for reference period
+  preds_ref_v4.3_vec <- predict(BGCmodel_v4.3, data = clim_ref)$prediction
+  preds_ref_v4.3 <- X
+  preds_ref_v4.3[points$id] <- factor(preds_ref_v4.3_vec, levels = subzones_colours_ref$BGC)
+  preds_ref_v4.3 <- project(preds_ref_v4.3, "EPSG:3857", method = "near") #have to manually resample to web mercator with nearest neighbour sampling otherwise leaflet will do so using bilinear interpolation which corrupts the factor levels at polygon boundaries. 
   
-  ## v2.2 model predictions for reference period
-  preds_ref_v2.2_vec <- predict(BGCmodel_v2.2, data = clim_ref)$prediction
-  preds_ref_v2.2 <- X
-  preds_ref_v2.2[points$id] <- factor(preds_ref_v2.2_vec, levels = subzones_colours_ref$BGC)
-  preds_ref_v2.2 <- project(preds_ref_v2.2, "EPSG:3857", method = "near") #have to manually resample to web mercator with nearest neighbour sampling otherwise leaflet will do so using bilinear interpolation which corrupts the factor levels at polygon boundaries. 
+  ## v4.3 model predictions for future period
+  preds_proj_v4.3_vec <- predict(BGCmodel_v4.3, data = clim_proj)$prediction
+  preds_proj_v4.3 <- X
+  preds_proj_v4.3[points$id] <- factor(preds_proj_v4.3_vec, levels = subzones_colours_ref$BGC)
+  preds_proj_v4.3 <- project(preds_proj_v4.3, "EPSG:3857", method = "near") #have to manually resample to web mercator with nearest neighbour sampling otherwise leaflet will do so using bilinear interpolation which corrupts the factor levels at polygon boundaries.
   
-  ## v2.2 model predictions for future period
-  preds_proj_v2.2_vec <- predict(BGCmodel_v2.2, data = clim_proj)$prediction
-  preds_proj_v2.2 <- X
-  preds_proj_v2.2[points$id] <- factor(preds_proj_v2.2_vec, levels = subzones_colours_ref$BGC)
-  preds_proj_v2.2 <- project(preds_proj_v2.2, "EPSG:3857", method = "near") #have to manually resample to web mercator with nearest neighbour sampling otherwise leaflet will do so using bilinear interpolation which corrupts the factor levels at polygon boundaries.
- 
+  ## v4.4 model predictions for reference period
+  preds_ref_v4.4_vec <- predict(BGCmodel_v4.4, data = clim_ref)$prediction
+  preds_ref_v4.4 <- X
+  preds_ref_v4.4[points$id] <- factor(preds_ref_v4.4_vec, levels = subzones_colours_ref$BGC)
+  preds_ref_v4.4 <- project(preds_ref_v4.4, "EPSG:3857", method = "near") #have to manually resample to web mercator with nearest neighbour sampling otherwise leaflet will do so using bilinear interpolation which corrupts the factor levels at polygon boundaries. 
+  
+  ## v4.4 model predictions for future period
+  preds_proj_v4.4_vec <- predict(BGCmodel_v4.4, data = clim_proj)$prediction
+  preds_proj_v4.4 <- X
+  preds_proj_v4.4[points$id] <- factor(preds_proj_v4.4_vec, levels = subzones_colours_ref$BGC)
+  preds_proj_v4.4 <- project(preds_proj_v4.4, "EPSG:3857", method = "near") #have to manually resample to web mercator with nearest neighbour sampling otherwise leaflet will do so using bilinear interpolation which corrupts the factor levels at polygon boundaries.
+  
   
   ## -------------------------------------------------
   ## leaflet map
@@ -388,13 +561,19 @@ for(studyname in studynames){
     addTiles(group = "OSM Basemap") %>%  # Keep OpenStreetMap as an option
     addRasterImage(preds_ref_v4.2, colors = color_pal, opacity = 1, group = "v4.2: baseline") %>%
     addRasterImage(preds_proj_v4.2, colors = color_pal, opacity = 1, group = "v4.2: future") %>%
-    addRasterImage(preds_ref_v2.2, colors = color_pal, opacity = 1, group = "v2.2: baseline") %>%
-    addRasterImage(preds_proj_v2.2, colors = color_pal, opacity = 1, group = "v2.2: future") %>%
+    addRasterImage(preds_ref_V4.2gini, colors = color_pal, opacity = 1, group = "V4.2gini: baseline") %>%
+    addRasterImage(preds_proj_V4.2gini, colors = color_pal, opacity = 1, group = "V4.2gini: future") %>%
+    # addRasterImage(preds_ref_v4.3, colors = color_pal, opacity = 1, group = "v4.3: baseline") %>%
+    # addRasterImage(preds_proj_v4.3, colors = color_pal, opacity = 1, group = "v4.3: future") %>%
+    # addRasterImage(preds_ref_v4.4, colors = color_pal, opacity = 1, group = "v4.4: baseline") %>%
+    # addRasterImage(preds_proj_v4.4, colors = color_pal, opacity = 1, group = "v4.4: future") %>%
     addRasterImage(bgcs_3857, colors = color_pal, opacity = 1, group = "BGC") %>%
     addLayersControl(
       baseGroups = c("Satellite", "OSM Basemap"),  # Base layer switcher
       overlayGroups = c("v4.2: baseline", "v4.2: future",
-                        "v2.2: baseline", "v2.2: future",
+                        "V4.2gini: baseline", "V4.2gini: future",
+                        # "v4.3: baseline", "v4.3: future",
+                        # "v4.4: baseline", "v4.4: future",
                         "BGC"),
       options = layersControlOptions(collapsed = FALSE)
     )
@@ -404,15 +583,19 @@ for(studyname in studynames){
   ## Compute classification error
   
   results.error[1, which(names(results.error)==studyname)] <- mean(values(bgcs_3857, mat = FALSE) != values(preds_ref_v4.2, mat = FALSE), na.rm=T)
-  results.error[2, which(names(results.error)==studyname)] <- mean(values(bgcs_3857, mat = FALSE) != values(preds_ref_v2.2, mat = FALSE), na.rm=T)
+  results.error[2, which(names(results.error)==studyname)] <- mean(values(bgcs_3857, mat = FALSE) != values(preds_ref_V4.2gini, mat = FALSE), na.rm=T)
+  results.error[3, which(names(results.error)==studyname)] <- mean(values(bgcs_3857, mat = FALSE) != values(preds_ref_v4.3, mat = FALSE), na.rm=T)
+  results.error[4, which(names(results.error)==studyname)] <- mean(values(bgcs_3857, mat = FALSE) != values(preds_ref_v4.4, mat = FALSE), na.rm=T)
   
   print(studyname)
 }
 write.csv(results.error, paste0(dir, "results.error.csv"), row.names = FALSE)
-results.error <- fread(paste0(dir, "results.error.csv"))
-results.error[, BC := NA_real_]
+
+
+# results.error[, BC := NA_real_]
 
 # Plot of error results
+results.error <- fread(paste0(dir, "results.error.csv"))
 plot.dir = "//objectstore2.nrs.bcgov/ffec/BGC_models"
 plot.name = "SamplingTrials_error"
 png(filename=paste0(plot.dir, "/", plot.name, ".png",sep="."), type="cairo", units="in", width=6.5, height=4, pointsize=10, res=300)
